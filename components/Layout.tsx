@@ -29,9 +29,11 @@ const Layout: React.FC<LayoutProps> = ({
   }, [role, currentPage]); // Refresh when context changes
 
   useEffect(() => {
+    // Immediate fetch
+    setNotifications(getNotifications(currentUser.id));
     const interval = setInterval(() => {
         setNotifications(getNotifications(currentUser.id));
-    }, 2000); // Polling for notifications simulation
+    }, 2000); 
     return () => clearInterval(interval);
   }, [currentUser.id]);
 
@@ -40,9 +42,9 @@ const Layout: React.FC<LayoutProps> = ({
   const adminMenu = [
     { id: 'dashboard', label: 'Visão Geral', icon: LayoutDashboard },
     { id: 'routines', label: 'Rotinas Mensais', icon: FileText },
-    { id: 'companies', label: 'Empresas', icon: Building2 },
-    { id: 'users', label: 'Usuários', icon: Users },
-    { id: 'communication', label: 'Comunicados (Push)', icon: Bell },
+    { id: 'documents', label: 'Arquivos', icon: FileText }, // Added for Admin
+    { id: 'communication', label: 'Comunicados', icon: Briefcase },
+    { id: 'settings', label: 'Configurações', icon: Settings },
   ];
 
   const clientMenu = [
@@ -52,6 +54,8 @@ const Layout: React.FC<LayoutProps> = ({
   ];
 
   const menuItems = role === 'admin' ? adminMenu : clientMenu;
+
+  const currentCompanyName = companies.find(c => c.id === currentCompanyId)?.name || 'Empresa';
 
   return (
     <div className="flex h-screen bg-slate-100 overflow-hidden">
@@ -83,21 +87,28 @@ const Layout: React.FC<LayoutProps> = ({
 
         <div className="px-4 mt-6">
            <label className="text-xs text-slate-500 uppercase font-semibold block mb-2">Empresa Selecionada</label>
-           <div className="relative">
-              <select 
-                value={currentCompanyId}
-                onChange={(e) => setCurrentCompanyId(e.target.value)}
-                className="w-full bg-slate-800 text-white border border-slate-700 rounded-lg p-2 text-sm appearance-none focus:ring-2 focus:ring-blue-500 outline-none"
-                disabled={role === 'client' && companies.length === 1}
-              >
-                {companies.map(c => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </select>
-              <div className="absolute right-3 top-3 pointer-events-none text-slate-400">
-                <ChevronDown size={14} />
-              </div>
-           </div>
+           
+           {role === 'admin' ? (
+             <div className="relative">
+                <select 
+                  value={currentCompanyId}
+                  onChange={(e) => setCurrentCompanyId(e.target.value)}
+                  className="w-full bg-slate-800 text-white border border-slate-700 rounded-lg p-2 text-sm appearance-none focus:ring-2 focus:ring-blue-500 outline-none"
+                >
+                  {companies.map(c => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+                <div className="absolute right-3 top-3 pointer-events-none text-slate-400">
+                  <ChevronDown size={14} />
+                </div>
+             </div>
+           ) : (
+             <div className="w-full bg-slate-800/50 text-slate-300 border border-slate-700 rounded-lg p-2 text-sm flex items-center gap-2">
+                <Building2 size={16} />
+                <span className="truncate">{currentCompanyName}</span>
+             </div>
+           )}
         </div>
 
         <nav className="mt-6 px-4 space-y-2">
@@ -163,7 +174,9 @@ const Layout: React.FC<LayoutProps> = ({
           
           <div className="flex-1 px-4 lg:px-0">
              <h2 className="text-xl font-semibold text-slate-800">
-               {menuItems.find(i => i.id === currentPage)?.label || 'ContabilConnect'}
+               {menuItems.find(i => i.id === currentPage)?.label || 
+                (currentPage === 'notifications' ? 'Notificações' : 
+                 currentPage === 'profile' ? 'Meu Perfil' : 'ContabilConnect')}
              </h2>
           </div>
 
@@ -185,12 +198,24 @@ const Layout: React.FC<LayoutProps> = ({
               {/* Dropdown */}
               {showNotifDropdown && (
                 <div className="absolute right-0 mt-2 w-80 bg-white rounded-xl shadow-xl border border-slate-100 overflow-hidden z-50">
-                   <div className="p-3 border-b border-slate-100 bg-slate-50 font-semibold text-slate-700">Notificações</div>
+                   <div className="p-3 border-b border-slate-100 bg-slate-50 font-semibold text-slate-700 flex justify-between items-center">
+                     <span>Notificações</span>
+                     <button 
+                      onClick={(e) => {
+                        e.stopPropagation(); // Prevent dropdown from closing immediately if checking click outside
+                        setShowNotifDropdown(false);
+                        setCurrentPage('notifications');
+                      }}
+                      className="text-xs text-blue-600 hover:underline cursor-pointer"
+                    >
+                      Ver todas
+                    </button>
+                   </div>
                    <div className="max-h-64 overflow-y-auto">
                       {notifications.length === 0 ? (
                         <div className="p-4 text-center text-slate-400 text-sm">Nenhuma notificação.</div>
                       ) : (
-                        notifications.map(n => (
+                        notifications.slice(0, 5).map(n => (
                           <div 
                             key={n.id} 
                             onClick={() => {
@@ -212,15 +237,18 @@ const Layout: React.FC<LayoutProps> = ({
               )}
             </div>
 
-            <div className="flex items-center space-x-3 pl-4 border-l border-slate-200">
+            <div 
+              className="flex items-center space-x-3 pl-4 border-l border-slate-200 cursor-pointer group"
+              onClick={() => setCurrentPage('profile')}
+            >
               <div className="text-right hidden sm:block">
-                <p className="text-sm font-medium text-slate-900">{currentUser.name}</p>
+                <p className="text-sm font-medium text-slate-900 group-hover:text-blue-600 transition-colors">{currentUser.name}</p>
                 <p className="text-xs text-slate-500 capitalize">{currentUser.role}</p>
               </div>
               {currentUser.photoUrl ? (
-                <img src={currentUser.photoUrl} className="w-9 h-9 rounded-full object-cover" />
+                <img src={currentUser.photoUrl} className="w-9 h-9 rounded-full object-cover border-2 border-transparent group-hover:border-blue-300 transition-all" />
               ) : (
-                <div className="w-9 h-9 bg-slate-200 rounded-full flex items-center justify-center text-slate-600 font-bold">
+                <div className="w-9 h-9 bg-slate-200 rounded-full flex items-center justify-center text-slate-600 font-bold group-hover:bg-blue-100 group-hover:text-blue-600 transition-all">
                    {currentUser.name.substring(0,2).toUpperCase()}
                 </div>
               )}

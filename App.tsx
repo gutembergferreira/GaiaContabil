@@ -5,8 +5,9 @@ import DashboardClient from './components/DashboardClient';
 import DocumentVault from './components/DocumentVault';
 import HRManagement from './components/HRManagement';
 import CommunicationCenter from './components/CommunicationCenter';
-import CompanyManager from './components/CompanyManager';
-import UserManager from './components/UserManager';
+import SettingsManager from './components/SettingsManager';
+import NotificationPage from './components/NotificationPage';
+import MonthlyRoutines from './components/MonthlyRoutines';
 import UserProfile from './components/UserProfile';
 import { Role, User } from './types';
 import { getUsers, updateUser } from './services/mockData';
@@ -41,17 +42,17 @@ const App: React.FC = () => {
       case 'dashboard':
         return role === 'admin' ? <DashboardAdmin /> : <DashboardClient />;
       case 'routines':
-        return <DashboardAdmin />; 
+        return <MonthlyRoutines />; 
       case 'documents':
         return <DocumentVault role={role} currentCompanyId={currentCompanyId} currentUser={currentUser} />;
       case 'hr':
         return <HRManagement role={role} />;
       case 'communication':
         return <CommunicationCenter role={role} />;
-      case 'companies':
-        return role === 'admin' ? <CompanyManager /> : <div>Acesso Negado</div>;
-      case 'users':
-        return role === 'admin' ? <UserManager /> : <div>Acesso Negado</div>;
+      case 'settings':
+        return role === 'admin' ? <SettingsManager /> : <div>Acesso Negado</div>;
+      case 'notifications':
+        return <NotificationPage userId={currentUser.id} />;
       case 'profile':
         return <UserProfile user={currentUser} onUpdate={handleProfileUpdate} />;
       default:

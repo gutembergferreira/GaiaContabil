@@ -2,6 +2,8 @@ import { Routine, Document, Company, User, Notification, ChatMessage, AuditLog, 
 
 // --- Initial Data ---
 
+let CATEGORIES: string[] = ['Boletos', 'Impostos', 'Folha', 'Contratos', 'Documentos Solicitados', 'Outros'];
+
 let COMPANIES: Company[] = [
   { id: 'c1', name: 'Serviços Gerais LTDA', cnpj: '12.345.678/0001-90', address: 'Rua A, 123', contact: '1199999999' },
   { id: 'c2', name: 'Comércio Varejo SA', cnpj: '98.765.432/0001-10', address: 'Av B, 456', contact: '1188888888' }
@@ -32,10 +34,15 @@ let DOCUMENTS: Document[] = [
 ];
 
 let NOTIFICATIONS: Notification[] = [
-  { id: 'n1', userId: 'u2', title: 'Imposto a vencer', message: 'O DAS vence amanhã.', read: false, timestamp: new Date().toISOString() }
+  { id: 'n1', userId: 'u2', title: 'Imposto a vencer', message: 'O DAS vence amanhã. Favor verificar a guia na aba de impostos.', read: false, timestamp: new Date().toISOString() }
 ];
 
 // --- Store Functions (Simulating Backend) ---
+
+// Categories
+export const getCategories = () => CATEGORIES;
+export const addCategory = (cat: string) => { if(!CATEGORIES.includes(cat)) CATEGORIES = [...CATEGORIES, cat]; };
+export const deleteCategory = (cat: string) => { CATEGORIES = CATEGORIES.filter(c => c !== cat); };
 
 // Companies
 export const getCompanies = () => COMPANIES;
@@ -71,8 +78,13 @@ export const addAuditLog = (docId: string, log: AuditLog) => {
 };
 
 // Notifications
-export const getNotifications = (userId: string) => NOTIFICATIONS.filter(n => n.userId === userId);
+export const getNotifications = (userId: string) => NOTIFICATIONS.filter(n => n.userId === userId).sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+export const getAllNotifications = () => [...NOTIFICATIONS].sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
 export const addNotification = (n: Notification) => { NOTIFICATIONS = [n, ...NOTIFICATIONS]; };
+export const updateNotification = (n: Notification) => { NOTIFICATIONS = NOTIFICATIONS.map(x => x.id === n.id ? n : x); };
+export const deleteNotification = (id: string) => { NOTIFICATIONS = NOTIFICATIONS.filter(n => n.id !== id); };
+
 export const markNotificationRead = (id: string) => {
   NOTIFICATIONS = NOTIFICATIONS.map(n => n.id === id ? { ...n, read: true } : n);
 };
@@ -81,6 +93,8 @@ export const markNotificationRead = (id: string) => {
 export const MOCK_ROUTINES: Routine[] = [
   { id: '1', title: 'Fechamento Folha', clientName: 'Serviços LTDA', department: 'Pessoal', deadline: '2024-06-05', status: 'Pendente', competence: '05/2024' },
   { id: '2', title: 'Apuração ICMS', clientName: 'Comércio Varejo SA', department: 'Fiscal', deadline: '2024-06-10', status: 'Em Análise', competence: '05/2024' },
+  { id: '3', title: 'Entrega DCTFWeb', clientName: 'Serviços LTDA', department: 'Contábil', deadline: '2024-06-15', status: 'Concluído', competence: '05/2024' },
+  { id: '4', title: 'Renovação Alvará', clientName: 'Comércio Varejo SA', department: 'Legalização', deadline: '2024-06-20', status: 'Pendente', competence: '2024' },
 ];
 
 export const MOCK_EMPLOYEES = [

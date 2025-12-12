@@ -2,7 +2,7 @@ export type Role = 'admin' | 'client';
 
 export type Department = 'Contábil' | 'Fiscal' | 'Pessoal' | 'Legalização';
 
-export type DocCategory = 'Boletos' | 'Contratos' | 'Impostos' | 'Folha' | 'Documentos Solicitados' | 'Outros';
+export type DocCategory = string;
 
 export type DocStatus = 'Enviado' | 'Visualizado';
 export type PaymentStatus = 'Pago' | 'Aberto' | 'N/A';

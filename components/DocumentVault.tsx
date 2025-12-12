@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { getDocuments, addDocument, updateDocument, addDocumentMessage, addAuditLog } from '../services/mockData';
+import { getDocuments, addDocument, updateDocument, addDocumentMessage, addAuditLog, getCategories } from '../services/mockData';
 import { Document, Role, DocCategory, ChatMessage } from '../types';
 import { FileText, Download, CheckCircle, Upload, Filter, Building, CreditCard, MessageCircle, Clock, Eye, Send, X, Plus } from 'lucide-react';
 
@@ -9,11 +9,10 @@ interface DocumentVaultProps {
   currentUser: { id: string; name: string };
 }
 
-const CATEGORIES: DocCategory[] = ['Boletos', 'Impostos', 'Folha', 'Contratos', 'Documentos Solicitados', 'Outros'];
-
 const DocumentVault: React.FC<DocumentVaultProps> = ({ role, currentCompanyId, currentUser }) => {
   const [documents, setDocuments] = useState<Document[]>([]);
-  const [selectedCategory, setSelectedCategory] = useState<DocCategory>('Boletos');
+  const [categories, setCategories] = useState<string[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState<string>('');
   
   // Filters
   const [filterMonth, setFilterMonth] = useState('');
@@ -25,15 +24,22 @@ const DocumentVault: React.FC<DocumentVaultProps> = ({ role, currentCompanyId, c
   const [selectedDoc, setSelectedDoc] = useState<Document | null>(null);
 
   // Upload Form
-  const [uploadData, setUploadData] = useState({ title: '', category: 'Boletos' as DocCategory, amount: 0, date: new Date().toISOString().split('T')[0] });
+  const [uploadData, setUploadData] = useState({ title: '', category: '', amount: 0, date: new Date().toISOString().split('T')[0] });
   
   // Chat Input
   const [chatInput, setChatInput] = useState('');
 
   useEffect(() => {
+    // Load categories
+    const cats = getCategories();
+    setCategories(cats);
+    if (cats.length > 0 && !selectedCategory) {
+        setSelectedCategory(cats[0]);
+    }
+    
     // Load documents for current company
     setDocuments(getDocuments(currentCompanyId));
-  }, [currentCompanyId, isUploadOpen, selectedDoc]); // Reload on changes
+  }, [currentCompanyId, isUploadOpen, selectedDoc]); 
 
   // Filter Logic
   const filteredDocs = documents.filter(doc => {
@@ -63,7 +69,7 @@ const DocumentVault: React.FC<DocumentVaultProps> = ({ role, currentCompanyId, c
      };
      addDocument(newDoc);
      setIsUploadOpen(false);
-     setUploadData({ title: '', category: 'Boletos', amount: 0, date: new Date().toISOString().split('T')[0] });
+     setUploadData({ title: '', category: categories[0] || '', amount: 0, date: new Date().toISOString().split('T')[0] });
   };
 
   const openDocument = (doc: Document) => {
@@ -107,13 +113,18 @@ const DocumentVault: React.FC<DocumentVaultProps> = ({ role, currentCompanyId, c
       <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-4">
          <div className="flex flex-col md:flex-row justify-between items-center gap-4">
             <h2 className="text-xl font-bold text-slate-800">Arquivos da Empresa</h2>
+            
             <div className="flex gap-2">
-                <button 
-                    onClick={() => setIsUploadOpen(true)}
-                    className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-blue-700"
-                >
-                    <Upload size={18} /> Upload Arquivo
-                </button>
+                {role === 'admin' ? (
+                  <button 
+                      onClick={() => setIsUploadOpen(true)}
+                      className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-blue-700"
+                  >
+                      <Upload size={18} /> Upload Arquivo
+                  </button>
+                ) : (
+                  <span className="text-sm text-slate-500 italic">Visualização de Arquivos</span>
+                )}
             </div>
          </div>
 
@@ -140,7 +151,7 @@ const DocumentVault: React.FC<DocumentVaultProps> = ({ role, currentCompanyId, c
 
          {/* Categories Tabs */}
          <div className="flex overflow-x-auto gap-2 border-b border-slate-200 pb-1">
-            {CATEGORIES.map(cat => (
+            {categories.map(cat => (
                 <button
                     key={cat}
                     onClick={() => setSelectedCategory(cat)}
@@ -189,8 +200,8 @@ const DocumentVault: React.FC<DocumentVaultProps> = ({ role, currentCompanyId, c
          )}
       </div>
 
-      {/* Upload Modal */}
-      {isUploadOpen && (
+      {/* Upload Modal (Admin Only) */}
+      {isUploadOpen && role === 'admin' && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
               <div className="bg-white rounded-xl p-6 w-full max-w-md">
                   <h3 className="text-lg font-bold mb-4">Upload de Arquivo</h3>
@@ -202,7 +213,7 @@ const DocumentVault: React.FC<DocumentVaultProps> = ({ role, currentCompanyId, c
                       <div>
                           <label className="block text-sm font-medium text-slate-700">Categoria</label>
                           <select value={uploadData.category} onChange={e => setUploadData({...uploadData, category: e.target.value as any})} className="w-full border rounded-lg p-2">
-                              {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                              {categories.map(c => <option key={c} value={c}>{c}</option>)}
                           </select>
                       </div>
                       {(uploadData.category === 'Boletos' || uploadData.category === 'Impostos') && (
@@ -257,6 +268,12 @@ const DocumentVault: React.FC<DocumentVaultProps> = ({ role, currentCompanyId, c
                                 </div>
                             </div>
                          )}
+                      </div>
+
+                      <div className="mb-6">
+                        <button className="w-full bg-blue-50 text-blue-600 py-3 rounded-lg font-medium flex items-center justify-center gap-2 hover:bg-blue-100 transition-colors">
+                           <Download size={20} /> Baixar Arquivo
+                        </button>
                       </div>
 
                       <div className="mb-6">

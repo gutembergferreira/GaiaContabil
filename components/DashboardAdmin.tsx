@@ -1,7 +1,7 @@
 import React from 'react';
 import { MOCK_ROUTINES } from '../services/mockData';
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend } from 'recharts';
-import { AlertCircle, CheckCircle, Clock } from 'lucide-react';
+import { AlertCircle, CheckCircle, Clock, TrendingUp } from 'lucide-react';
 
 const DashboardAdmin: React.FC = () => {
   
@@ -27,9 +27,14 @@ const DashboardAdmin: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      <div className="flex justify-between items-center">
+         <h2 className="text-2xl font-bold text-slate-800">Visão Geral do Escritório</h2>
+         <span className="text-sm text-slate-500">Última atualização: Hoje, 14:30</span>
+      </div>
+
       {/* KPI Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 transform hover:-translate-y-1 transition-transform duration-200">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-slate-500 font-medium">Entregas Pendentes</p>
@@ -39,8 +44,9 @@ const DashboardAdmin: React.FC = () => {
               <Clock size={24} />
             </div>
           </div>
+          <div className="mt-2 text-xs text-amber-600 font-medium">+12 que semana passada</div>
         </div>
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 transform hover:-translate-y-1 transition-transform duration-200">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-slate-500 font-medium">Entregues no Prazo</p>
@@ -50,34 +56,37 @@ const DashboardAdmin: React.FC = () => {
               <CheckCircle size={24} />
             </div>
           </div>
+          <div className="mt-2 text-xs text-emerald-600 font-medium">98% de eficiência</div>
         </div>
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 transform hover:-translate-y-1 transition-transform duration-200">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-slate-500 font-medium">Guias em Atraso (Clientes)</p>
+              <p className="text-sm text-slate-500 font-medium">Guias em Atraso</p>
               <h3 className="text-2xl font-bold text-slate-800">12</h3>
             </div>
             <div className="p-3 bg-red-100 text-red-600 rounded-full">
               <AlertCircle size={24} />
             </div>
           </div>
+          <div className="mt-2 text-xs text-red-500 font-medium">Ação necessária</div>
         </div>
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 transform hover:-translate-y-1 transition-transform duration-200">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-slate-500 font-medium">Solicitações Extras</p>
               <h3 className="text-2xl font-bold text-slate-800">8</h3>
             </div>
             <div className="p-3 bg-blue-100 text-blue-600 rounded-full">
-              <AlertCircle size={24} />
+              <TrendingUp size={24} />
             </div>
           </div>
+          <div className="mt-2 text-xs text-blue-600 font-medium">Novos chamados</div>
         </div>
       </div>
 
       {/* Charts Section */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 h-80">
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 h-96">
           <h4 className="text-lg font-semibold text-slate-800 mb-4">Status Geral das Entregas</h4>
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
@@ -85,8 +94,8 @@ const DashboardAdmin: React.FC = () => {
                 data={pieData}
                 cx="50%"
                 cy="50%"
-                innerRadius={60}
-                outerRadius={80}
+                innerRadius={70}
+                outerRadius={100}
                 fill="#8884d8"
                 paddingAngle={5}
                 dataKey="value"
@@ -101,7 +110,7 @@ const DashboardAdmin: React.FC = () => {
           </ResponsiveContainer>
         </div>
 
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 h-80">
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 h-96">
           <h4 className="text-lg font-semibold text-slate-800 mb-4">Performance por Departamento</h4>
           <ResponsiveContainer width="100%" height="100%">
             <BarChart
@@ -112,60 +121,10 @@ const DashboardAdmin: React.FC = () => {
               <YAxis />
               <Tooltip />
               <Legend />
-              <Bar dataKey="entregues" stackId="a" fill="#10B981" name="Entregues" />
-              <Bar dataKey="pendentes" stackId="a" fill="#F59E0B" name="Pendentes" />
+              <Bar dataKey="entregues" stackId="a" fill="#10B981" name="Entregues" radius={[0, 0, 4, 4]} />
+              <Bar dataKey="pendentes" stackId="a" fill="#F59E0B" name="Pendentes" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
-        </div>
-      </div>
-
-      {/* Routine List Preview */}
-      <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
-        <div className="p-6 border-b border-slate-100 flex justify-between items-center">
-          <h4 className="text-lg font-semibold text-slate-800">Próximos Vencimentos</h4>
-          <button className="text-blue-600 text-sm font-medium hover:underline">Ver todas</button>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm text-left">
-            <thead className="text-xs text-slate-500 uppercase bg-slate-50">
-              <tr>
-                <th className="px-6 py-3">Cliente</th>
-                <th className="px-6 py-3">Obrigação</th>
-                <th className="px-6 py-3">Depto</th>
-                <th className="px-6 py-3">Vencimento</th>
-                <th className="px-6 py-3">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {MOCK_ROUTINES.map((routine) => (
-                <tr key={routine.id} className="bg-white border-b hover:bg-slate-50">
-                  <td className="px-6 py-4 font-medium text-slate-900">{routine.clientName}</td>
-                  <td className="px-6 py-4">{routine.title}</td>
-                  <td className="px-6 py-4">
-                    <span className={`px-2 py-1 rounded text-xs font-semibold
-                      ${routine.department === 'Pessoal' ? 'bg-purple-100 text-purple-700' : 
-                        routine.department === 'Fiscal' ? 'bg-blue-100 text-blue-700' :
-                        routine.department === 'Contábil' ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-700'
-                      }
-                    `}>
-                      {routine.department}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4">{new Date(routine.deadline).toLocaleDateString('pt-BR')}</td>
-                  <td className="px-6 py-4">
-                     <span className={`px-2 py-1 rounded-full text-xs font-semibold
-                      ${routine.status === 'Concluído' ? 'bg-emerald-100 text-emerald-700' : 
-                        routine.status === 'Atrasado' ? 'bg-red-100 text-red-700' :
-                        routine.status === 'Pendente' ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'
-                      }
-                    `}>
-                      {routine.status}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
         </div>
       </div>
     </div>
