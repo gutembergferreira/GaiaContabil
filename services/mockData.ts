@@ -1,4 +1,4 @@
-import { Routine, Document, Company, User, Notification, ChatMessage, AuditLog, ServiceRequest, RequestTypeConfig } from '../types';
+import { Routine, Document, Company, User, Notification, ChatMessage, AuditLog, ServiceRequest, RequestTypeConfig, PaymentConfig } from '../types';
 
 // --- Initial Data ---
 
@@ -11,6 +11,17 @@ let REQUEST_TYPES: RequestTypeConfig[] = [
   { id: 'rt4', name: 'Solicitação de Documento', price: 0 },
   { id: 'rt5', name: 'Certidão Negativa Extra', price: 50.00 },
 ];
+
+let PAYMENT_CONFIG: PaymentConfig = {
+  enablePix: false,
+  enableGateway: false,
+  inter: {
+    clientId: '',
+    clientSecret: '',
+    certificateUploaded: false,
+    pixKey: ''
+  }
+};
 
 let COMPANIES: Company[] = [
   { id: 'c1', name: 'Serviços Gerais LTDA', cnpj: '12.345.678/0001-90', address: 'Rua A, 123', contact: '1199999999' },
@@ -51,6 +62,78 @@ let NOTIFICATIONS: Notification[] = [
 ];
 
 // --- Store Functions ---
+
+// Payment Config
+export const getPaymentConfig = () => PAYMENT_CONFIG;
+export const updatePaymentConfig = (config: PaymentConfig) => { PAYMENT_CONFIG = config; };
+
+// Inter API Simulation
+export const generatePixCharge = async (reqId: string, amount: number): Promise<{txid: string, pixCopiaECola: string}> => {
+  // Simulates:
+  // 1. Authenticate with ClientID/Secret + Cert -> Get Token
+  // 2. POST /cob -> Get txid & copiaEcola
+  
+  if (!PAYMENT_CONFIG.inter.clientId || !PAYMENT_CONFIG.inter.certificateUploaded) {
+    throw new Error("Configuração de pagamento incompleta.");
+  }
+
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      const txid = `TXID-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
+      // Mock Pix Copia e Cola
+      const pixCopiaECola = `00020126360014BR.GOV.BCB.PIX0114${PAYMENT_CONFIG.inter.pixKey || 'CHAVE-ALEATORIA'}5204000053039865802BR5913ContabilConnect6008SaoPaulo62070503***6304${txid}`;
+      
+      // Update Request in DB
+      const req = SERVICE_REQUESTS.find(r => r.id === reqId);
+      if (req) {
+        req.txid = txid;
+        req.pixCopiaECola = pixCopiaECola;
+        // 60 minutes validity
+        req.pixExpiration = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+        req.auditLog.push({
+          id: Date.now().toString(),
+          action: 'Cobrança PIX Gerada (Aguardando Webhook)',
+          user: 'Sistema',
+          timestamp: new Date().toISOString()
+        });
+        updateServiceRequest(req);
+      }
+      resolve({ txid, pixCopiaECola });
+    }, 1000);
+  });
+};
+
+// Simulate Webhook Callback (Called by "Simulate Bank App" button in UI)
+export const simulateWebhookPayment = (txid: string) => {
+  const req = SERVICE_REQUESTS.find(r => r.txid === txid);
+  if (req && req.status === 'Pendente Pagamento') {
+    req.status = 'Solicitada'; // Workflow starts
+    req.paymentStatus = 'Aprovado';
+    req.auditLog.push({
+      id: Date.now().toString(),
+      action: 'Webhook: Pagamento Confirmado',
+      user: 'Banco Inter API',
+      timestamp: new Date().toISOString()
+    });
+    
+    // Notify Admin
+    const admins = USERS.filter(u => u.role === 'admin');
+    admins.forEach(admin => {
+        addNotification({
+            id: Date.now().toString(),
+            userId: admin.id,
+            title: 'Pagamento PIX Recebido',
+            message: `O pagamento do pedido ${req.protocol} foi confirmado via Webhook.`,
+            read: false,
+            timestamp: new Date().toISOString()
+        });
+    });
+
+    updateServiceRequest(req);
+    return true;
+  }
+  return false;
+};
 
 // Categories
 export const getCategories = () => CATEGORIES;

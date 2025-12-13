@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { ServiceRequest, Role, User, ChatMessage, RequestTypeConfig } from '../types';
+import { ServiceRequest, Role, User, ChatMessage, RequestTypeConfig, PaymentConfig, Document } from '../types';
 import { 
     getServiceRequests, addServiceRequest, updateServiceRequest, softDeleteServiceRequest, 
-    restoreServiceRequest, getRequestTypes, getDeletedServiceRequests
+    restoreServiceRequest, getRequestTypes, getDeletedServiceRequests, getPaymentConfig, generatePixCharge, simulateWebhookPayment,
+    addDocument
 } from '../services/mockData';
 import { 
     Plus, Search, MessageSquare, Clock, CheckCircle, FileText, 
-    Send, X, Trash2, RotateCcw, Eye, CreditCard, QrCode, Upload, Download, AlertTriangle
+    Send, X, Trash2, RotateCcw, Eye, CreditCard, QrCode, Upload, Download, AlertTriangle, Copy, RefreshCw
 } from 'lucide-react';
 
 interface RequestManagerProps {
@@ -19,6 +20,7 @@ const RequestManager: React.FC<RequestManagerProps> = ({ role, currentUser, curr
   const [requests, setRequests] = useState<ServiceRequest[]>([]);
   const [deletedRequests, setDeletedRequests] = useState<ServiceRequest[]>([]);
   const [types, setTypes] = useState<RequestTypeConfig[]>([]);
+  const [paymentConfig, setPaymentConfig] = useState<PaymentConfig | null>(null);
   
   // UI State
   const [view, setView] = useState<'list' | 'bin'>('list');
@@ -31,14 +33,33 @@ const RequestManager: React.FC<RequestManagerProps> = ({ role, currentUser, curr
   
   // Payment Modal
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
-  const [paymentStep, setPaymentStep] = useState<'select' | 'pix' | 'confirm'>('select');
+  const [pixLoading, setPixLoading] = useState(false);
 
   // Chat
   const [chatInput, setChatInput] = useState('');
 
+  // Polling for Webhook Simulation
+  useEffect(() => {
+    let interval: ReturnType<typeof setInterval>;
+    if (isPaymentModalOpen && selectedReq && selectedReq.status === 'Pendente Pagamento') {
+        // Poll to see if the webhook simulation changed the status in the "backend" (mockData)
+        interval = setInterval(() => {
+            const updated = getServiceRequests().find(r => r.id === selectedReq.id);
+            if (updated && updated.status !== 'Pendente Pagamento') {
+                setSelectedReq(updated);
+                refreshData();
+                setIsPaymentModalOpen(false);
+                alert('Pagamento confirmado via PIX!');
+            }
+        }, 2000);
+    }
+    return () => clearInterval(interval);
+  }, [isPaymentModalOpen, selectedReq]);
+
   useEffect(() => {
     refreshData();
     setTypes(getRequestTypes());
+    setPaymentConfig(getPaymentConfig());
   }, [currentCompanyId, role, view]);
 
   const refreshData = () => {
@@ -80,6 +101,31 @@ const RequestManager: React.FC<RequestManagerProps> = ({ role, currentUser, curr
 
   const updateStatus = (status: ServiceRequest['status']) => {
       if (!selectedReq) return;
+      
+      // Auto-generate document on 'Resolvido'
+      if (status === 'Resolvido' && selectedReq.status !== 'Resolvido') {
+          const newDoc: Document = {
+              id: Date.now().toString(),
+              title: `Resolução: ${selectedReq.title}`,
+              category: 'Documentos Solicitados',
+              date: new Date().toISOString().split('T')[0],
+              companyId: selectedReq.companyId,
+              status: 'Enviado',
+              paymentStatus: 'N/A',
+              chat: [],
+              auditLog: [{id: Date.now().toString(), action: 'Gerado automaticamente via Solicitação', user: 'Sistema', timestamp: new Date().toISOString()}]
+          };
+          addDocument(newDoc);
+          
+          // Log document creation in request audit
+          selectedReq.auditLog.push({
+              id: Date.now().toString() + 'doc',
+              action: 'Documento gerado e enviado para "Documentos Solicitados"',
+              user: 'Sistema',
+              timestamp: new Date().toISOString()
+          });
+      }
+
       const updated = { ...selectedReq, status, updatedAt: new Date().toISOString() };
       
       updated.auditLog.push({
@@ -94,37 +140,37 @@ const RequestManager: React.FC<RequestManagerProps> = ({ role, currentUser, curr
       refreshData();
   };
 
-  const handlePaymentProofUpload = () => {
-      if (!selectedReq) return;
-      // Simulate upload
-      const updated: ServiceRequest = { 
-          ...selectedReq, 
-          status: 'Pagamento em Análise',
-          paymentStatus: 'Em Análise',
-          proofUrl: 'comprovante_mock.pdf',
-          updatedAt: new Date().toISOString() 
-      };
-      updated.auditLog.push({ id: Date.now().toString(), action: 'Comprovante Enviado', user: currentUser.name, timestamp: new Date().toISOString() });
+  const handleGeneratePix = async () => {
+      if(!selectedReq || !paymentConfig?.enablePix) return;
       
-      updateServiceRequest(updated);
-      setSelectedReq(updated);
-      setIsPaymentModalOpen(false);
-      refreshData();
-      alert('Comprovante enviado! Aguarde a confirmação do administrador.');
+      setPixLoading(true);
+      try {
+          const { txid, pixCopiaECola } = await generatePixCharge(selectedReq.id, selectedReq.price);
+          
+          // Local update to show immediately
+          const updatedReq = { 
+              ...selectedReq, 
+              txid, 
+              pixCopiaECola,
+              pixExpiration: new Date(Date.now() + 60 * 60 * 1000).toISOString()
+          };
+          updateServiceRequest(updatedReq);
+          setSelectedReq(updatedReq);
+      } catch (error) {
+          alert("Erro ao gerar PIX. Verifique as configurações da API Inter.");
+      } finally {
+          setPixLoading(false);
+      }
   };
 
-  const confirmPayment = () => {
-      if(!selectedReq) return;
-      const updated: ServiceRequest = {
-          ...selectedReq,
-          status: 'Solicitada',
-          paymentStatus: 'Aprovado',
-          updatedAt: new Date().toISOString()
-      };
-      updated.auditLog.push({ id: Date.now().toString(), action: 'Pagamento Confirmado pelo Admin', user: currentUser.name, timestamp: new Date().toISOString() });
-      updateServiceRequest(updated);
-      setSelectedReq(updated);
-      refreshData();
+  const simulateUserPaying = () => {
+      if (selectedReq?.txid) {
+          const success = simulateWebhookPayment(selectedReq.txid);
+          if (success) {
+              // The interval polling will catch this update
+              console.log("Webhook triggered simulation");
+          }
+      }
   };
 
   const handleDelete = (id: string) => {
@@ -308,49 +354,78 @@ const RequestManager: React.FC<RequestManagerProps> = ({ role, currentUser, curr
        {isPaymentModalOpen && selectedReq && (
            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
                <div className="bg-white rounded-xl p-6 w-full max-w-md text-center">
-                   <h3 className="text-xl font-bold mb-2">Pagamento do Serviço</h3>
+                   <div className="flex justify-between items-center mb-4">
+                       <h3 className="text-xl font-bold">Pagamento do Serviço</h3>
+                       <button onClick={() => setIsPaymentModalOpen(false)} className="text-slate-400 hover:text-slate-600"><X size={20} /></button>
+                   </div>
+                   
                    <p className="text-slate-500 mb-6">Valor Total: <span className="font-bold text-slate-800 text-lg">R$ {selectedReq.price.toFixed(2)}</span></p>
 
-                   {paymentStep === 'select' && (
-                       <div className="space-y-3">
-                           <button onClick={() => setPaymentStep('pix')} className="w-full p-4 border rounded-lg hover:bg-slate-50 flex items-center gap-3">
-                               <QrCode size={24} className="text-blue-600" />
-                               <div className="text-left">
-                                   <p className="font-bold">Pagar com PIX</p>
-                                   <p className="text-xs text-slate-500">Aprovação rápida</p>
+                   {/* Step 1: Generate or View QR Code */}
+                   {!selectedReq.pixCopiaECola ? (
+                       <div className="space-y-4">
+                           {paymentConfig?.enablePix ? (
+                               <button 
+                                onClick={handleGeneratePix} 
+                                disabled={pixLoading}
+                                className="w-full bg-blue-600 text-white p-4 rounded-lg hover:bg-blue-700 flex items-center justify-center gap-3 disabled:opacity-50"
+                               >
+                                   {pixLoading ? <RefreshCw className="animate-spin"/> : <QrCode size={24} />}
+                                   <div className="text-left">
+                                       <p className="font-bold">Gerar QR Code PIX (Inter)</p>
+                                       <p className="text-xs opacity-90">Validade de 60 minutos</p>
+                                   </div>
+                               </button>
+                           ) : (
+                               <div className="p-4 bg-gray-100 rounded-lg border border-gray-200 text-slate-500 text-sm">
+                                   Pagamento via PIX indisponível no momento (Não configurado).
                                </div>
-                           </button>
-                           <button disabled className="w-full p-4 border rounded-lg opacity-50 cursor-not-allowed flex items-center gap-3">
+                           )}
+
+                           <button disabled className="w-full p-4 border rounded-lg opacity-50 cursor-not-allowed flex items-center justify-center gap-3 bg-slate-50">
                                <CreditCard size={24} className="text-slate-400" />
                                <div className="text-left">
                                    <p className="font-bold text-slate-400">Cartão de Crédito</p>
-                                   <p className="text-xs text-slate-400">Em breve</p>
+                                   <p className="text-xs text-slate-400">Gateway não configurado</p>
                                </div>
                            </button>
                        </div>
-                   )}
-
-                   {paymentStep === 'pix' && (
+                   ) : (
+                       // Step 2: Show QR Code
                        <div className="space-y-4">
-                           <div className="bg-slate-100 p-4 rounded-lg inline-block">
-                               <QrCode size={120} className="text-slate-800" />
+                           <div className="bg-white p-4 rounded-lg inline-block border-4 border-slate-800">
+                               {/* Mock QR Code Image since we don't have a real generator lib */}
+                               <div className="w-48 h-48 bg-slate-900 flex items-center justify-center text-white text-xs text-center p-2">
+                                   [QR Code Gerado pela API Inter para TXID: {selectedReq.txid?.substring(0,8)}...]
+                               </div>
                            </div>
-                           <p className="text-sm text-slate-600">Escaneie o QR Code ou use a chave abaixo:</p>
-                           <code className="block bg-slate-100 p-2 rounded text-xs break-all">00020126360014BR.GOV.BCB.PIX011412.345.678/00015204000053039865802BR5913ContabilConnect6008SaoPaulo62070503***6304E2CA</code>
                            
-                           <div className="pt-4 border-t border-slate-100">
-                               <p className="text-sm font-bold mb-2">Já realizou o pagamento?</p>
-                               <button onClick={() => handlePaymentProofUpload()} className="w-full bg-blue-600 text-white py-2 rounded-lg flex items-center justify-center gap-2">
-                                   <Upload size={18} /> Enviar Comprovante
+                           <div className="text-left bg-slate-50 p-3 rounded border border-slate-200">
+                               <p className="text-xs font-bold text-slate-500 mb-1">Pix Copia e Cola</p>
+                               <div className="flex gap-2">
+                                   <code className="text-[10px] break-all bg-white p-1 border rounded flex-1">
+                                       {selectedReq.pixCopiaECola}
+                                   </code>
+                                   <button className="text-blue-600 hover:text-blue-800" title="Copiar"><Copy size={16}/></button>
+                               </div>
+                           </div>
+
+                           <div className="flex items-center justify-center gap-2 text-amber-600 text-sm py-2">
+                               <RefreshCw size={16} className="animate-spin"/>
+                               Aguardando confirmação do banco...
+                           </div>
+
+                           <div className="mt-4 pt-4 border-t border-slate-100">
+                               {/* DEMO ONLY BUTTON */}
+                               <button 
+                                onClick={simulateUserPaying}
+                                className="text-xs text-slate-400 hover:text-blue-600 underline"
+                               >
+                                   (Demo) Simular Pagamento no App do Banco
                                </button>
                            </div>
-                           <button onClick={() => setPaymentStep('select')} className="text-sm text-slate-500 hover:underline">Voltar</button>
                        </div>
                    )}
-
-                   <button onClick={() => setIsPaymentModalOpen(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600">
-                       <X size={20} />
-                   </button>
                </div>
            </div>
        )}
@@ -387,21 +462,11 @@ const RequestManager: React.FC<RequestManagerProps> = ({ role, currentUser, curr
                                    <span className="text-sm text-slate-600">Status Pagamento: <span className="font-semibold">{selectedReq.paymentStatus}</span></span>
                                    
                                    {role === 'client' && selectedReq.status === 'Pendente Pagamento' && (
-                                       <button onClick={() => { setPaymentStep('select'); setIsPaymentModalOpen(true); }} className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-green-700 flex items-center gap-2">
-                                           <CreditCard size={16}/> Pagar Agora
+                                       <button onClick={() => { setIsPaymentModalOpen(true); }} className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-green-700 flex items-center gap-2">
+                                           <CreditCard size={16}/> {selectedReq.pixCopiaECola ? 'Ver QR Code' : 'Pagar Agora'}
                                        </button>
                                    )}
 
-                                   {role === 'admin' && selectedReq.status === 'Pagamento em Análise' && (
-                                       <div className="flex items-center gap-2">
-                                           <button className="text-blue-600 text-sm hover:underline flex items-center gap-1">
-                                               <Download size={14}/> Ver Comprovante
-                                           </button>
-                                           <button onClick={confirmPayment} className="bg-green-600 text-white px-3 py-1.5 rounded text-sm hover:bg-green-700">
-                                               Confirmar Pagamento
-                                           </button>
-                                       </div>
-                                   )}
                                     {selectedReq.paymentStatus === 'Aprovado' && (
                                        <span className="text-green-600 font-bold flex items-center gap-1"><CheckCircle size={16}/> Pago</span>
                                    )}
@@ -414,9 +479,9 @@ const RequestManager: React.FC<RequestManagerProps> = ({ role, currentUser, curr
                            <div className="mb-8 p-4 bg-slate-50 rounded-xl border border-slate-100">
                                <h4 className="text-xs font-bold uppercase text-slate-400 mb-3">Fluxo de Trabalho</h4>
                                
-                               {selectedReq.status === 'Pendente Pagamento' || selectedReq.status === 'Pagamento em Análise' ? (
+                               {selectedReq.status === 'Pendente Pagamento' ? (
                                    <p className="text-sm text-amber-600 flex items-center gap-2">
-                                       <AlertTriangle size={16}/> O fluxo iniciará após a confirmação do pagamento.
+                                       <AlertTriangle size={16}/> O fluxo iniciará automaticamente após a confirmação do pagamento via API.
                                    </p>
                                ) : (
                                    <div className="flex flex-wrap gap-2">

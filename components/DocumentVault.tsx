@@ -41,6 +41,18 @@ const DocumentVault: React.FC<DocumentVaultProps> = ({ role, currentCompanyId, c
     setDocuments(getDocuments(currentCompanyId));
   }, [currentCompanyId, isUploadOpen, selectedDoc]); 
 
+  // Compute badges for tabs
+  const badgeCounts = categories.reduce((acc, cat) => {
+      // For Client: Count 'Enviado' (New)
+      if (role === 'client') {
+          acc[cat] = documents.filter(d => d.category === cat && d.status === 'Enviado').length;
+      } else {
+          // For Admin: Maybe specific logic or 0
+          acc[cat] = 0;
+      }
+      return acc;
+  }, {} as Record<string, number>);
+
   // Filter Logic
   const filteredDocs = documents.filter(doc => {
      const matchesCategory = doc.category === selectedCategory;
@@ -155,13 +167,18 @@ const DocumentVault: React.FC<DocumentVaultProps> = ({ role, currentCompanyId, c
                 <button
                     key={cat}
                     onClick={() => setSelectedCategory(cat)}
-                    className={`px-4 py-2 text-sm font-medium whitespace-nowrap rounded-t-lg transition-colors ${
+                    className={`px-4 py-2 text-sm font-medium whitespace-nowrap rounded-t-lg transition-colors flex items-center gap-2 ${
                         selectedCategory === cat 
                         ? 'bg-slate-100 text-blue-600 border-b-2 border-blue-600' 
                         : 'text-slate-500 hover:text-slate-700'
                     }`}
                 >
                     {cat}
+                    {badgeCounts[cat] > 0 && (
+                        <span className="bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                            {badgeCounts[cat]}
+                        </span>
+                    )}
                 </button>
             ))}
          </div>

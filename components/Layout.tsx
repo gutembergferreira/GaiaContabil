@@ -3,7 +3,7 @@ import {
   LayoutDashboard, FileText, Users, Bell, Settings, LogOut, Briefcase, Building2, Menu, X, UserCircle, ChevronDown, MessageSquare
 } from 'lucide-react';
 import { Role, Company, User } from '../types';
-import { getCompanies, getUsers, getNotifications, markNotificationRead } from '../services/mockData';
+import { getCompanies, getUsers, getNotifications, markNotificationRead, getServiceRequests, getDocuments } from '../services/mockData';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -23,45 +23,62 @@ const Layout: React.FC<LayoutProps> = ({
   const [companies, setCompanies] = useState<Company[]>([]);
   const [notifications, setNotifications] = useState(getNotifications(currentUser.id));
   const [showNotifDropdown, setShowNotifDropdown] = useState(false);
+  
+  // Badge Counts
+  const [reqCount, setReqCount] = useState(0);
+  const [docCount, setDocCount] = useState(0);
 
   useEffect(() => {
     setCompanies(getCompanies());
-  }, [role, currentPage]); // Refresh when context changes
+  }, [role, currentPage]); 
 
   useEffect(() => {
-    // Immediate fetch
-    setNotifications(getNotifications(currentUser.id));
-    const interval = setInterval(() => {
+    // Immediate fetch & polling for counts
+    const fetchData = () => {
         setNotifications(getNotifications(currentUser.id));
-    }, 2000); 
+        
+        // Calculate Badges (Simple logic: Unread/New items)
+        // For requests: Count 'Pendente Pagamento' or 'Solicitada' depending on role
+        const reqs = getServiceRequests(role === 'client' ? currentCompanyId : undefined);
+        const newReqs = role === 'admin' 
+            ? reqs.filter(r => r.status === 'Solicitada' || r.status === 'Pendente Pagamento').length 
+            : reqs.filter(r => r.status === 'Em Validação' || r.status === 'Resolvido').length; // Client sees updates
+        setReqCount(newReqs);
+
+        // For Docs:
+        const docs = getDocuments(currentCompanyId);
+        const newDocs = role === 'client' ? docs.filter(d => d.status === 'Enviado').length : 0;
+        setDocCount(newDocs);
+    };
+
+    fetchData();
+    const interval = setInterval(fetchData, 2000); 
     return () => clearInterval(interval);
-  }, [currentUser.id]);
+  }, [currentUser.id, role, currentCompanyId]);
 
   const unreadCount = notifications.filter(n => !n.read).length;
 
   const adminMenu = [
     { id: 'dashboard', label: 'Visão Geral', icon: LayoutDashboard },
     { id: 'routines', label: 'Rotinas Mensais', icon: FileText },
-    { id: 'documents', label: 'Arquivos', icon: FileText }, 
-    { id: 'requests', label: 'Solicitações', icon: MessageSquare }, // New
+    { id: 'documents', label: 'Arquivos', icon: FileText, badge: 0 }, 
+    { id: 'requests', label: 'Solicitações', icon: MessageSquare, badge: reqCount }, 
     { id: 'communication', label: 'Comunicados', icon: Briefcase },
     { id: 'settings', label: 'Configurações', icon: Settings },
   ];
 
   const clientMenu = [
     { id: 'dashboard', label: 'Meu Painel', icon: LayoutDashboard },
-    { id: 'requests', label: 'Solicitações / Pedidos', icon: MessageSquare }, // New
-    { id: 'documents', label: 'Arquivos', icon: FileText },
-    { id: 'hr', label: 'Depto. Pessoal', icon: Users },
+    { id: 'requests', label: 'Solicitações / Pedidos', icon: MessageSquare, badge: reqCount }, 
+    { id: 'documents', label: 'Arquivos', icon: FileText, badge: docCount },
+    { id: 'hr', label: 'Depto. Pessoal', icon: Users, badge: 0 }, // Placeholder badge for HR logic
   ];
 
   const menuItems = role === 'admin' ? adminMenu : clientMenu;
 
   const currentCompanyName = companies.find(c => c.id === currentCompanyId)?.name || 'Empresa';
 
-  const handleNotificationClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    e.preventDefault();
+  const handleNotificationClick = () => {
     setShowNotifDropdown(false);
     setCurrentPage('notifications');
   };
@@ -128,14 +145,21 @@ const Layout: React.FC<LayoutProps> = ({
                 setCurrentPage(item.id);
                 setIsSidebarOpen(false);
               }}
-              className={`flex items-center space-x-3 w-full px-4 py-3 rounded-lg transition-colors ${
+              className={`flex items-center justify-between w-full px-4 py-3 rounded-lg transition-colors ${
                 currentPage === item.id 
                   ? 'bg-blue-600 text-white shadow-lg' 
                   : 'text-slate-400 hover:bg-slate-800 hover:text-white'
               }`}
             >
-              <item.icon size={20} />
-              <span>{item.label}</span>
+              <div className="flex items-center space-x-3">
+                  <item.icon size={20} />
+                  <span>{item.label}</span>
+              </div>
+              {item.badge && item.badge > 0 ? (
+                  <span className="bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                      {item.badge}
+                  </span>
+              ) : null}
             </button>
           ))}
         </nav>
@@ -209,12 +233,12 @@ const Layout: React.FC<LayoutProps> = ({
                 <div className="absolute right-0 mt-2 w-80 bg-white rounded-xl shadow-xl border border-slate-100 overflow-hidden z-50">
                    <div className="p-3 border-b border-slate-100 bg-slate-50 font-semibold text-slate-700 flex justify-between items-center">
                      <span>Notificações</span>
-                     <div 
+                     <button 
                       onClick={handleNotificationClick}
-                      className="text-xs text-blue-600 hover:underline cursor-pointer"
+                      className="text-xs text-blue-600 hover:underline cursor-pointer bg-transparent border-none p-0"
                     >
                       Ver todas
-                    </div>
+                    </button>
                    </div>
                    <div className="max-h-64 overflow-y-auto">
                       {notifications.length === 0 ? (

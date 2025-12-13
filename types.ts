@@ -17,6 +17,19 @@ export type PaymentStatus = 'Pago' | 'Aberto' | 'N/A';
 export type RequestStatus = 'Pendente Pagamento' | 'Pagamento em Análise' | 'Solicitada' | 'Visualizada' | 'Em Resolução' | 'Em Validação' | 'Resolvido';
 export type RequestPaymentStatus = 'Pendente' | 'Em Análise' | 'Aprovado' | 'N/A';
 
+export interface InterCredentials {
+  clientId: string;
+  clientSecret: string;
+  certificateUploaded: boolean; // Mock check for .crt and .key
+  pixKey: string;
+}
+
+export interface PaymentConfig {
+  enablePix: boolean;
+  enableGateway: boolean; // Future placeholder
+  inter: InterCredentials;
+}
+
 export interface ChatMessage {
   id: string;
   sender: string;
@@ -77,7 +90,11 @@ export interface ServiceRequest {
   
   status: RequestStatus;
   paymentStatus: RequestPaymentStatus;
-  proofUrl?: string; // Mock URL for uploaded receipt
+  
+  // PIX Fields
+  txid?: string;
+  pixCopiaECola?: string;
+  pixExpiration?: string; // ISO Date for expiration (60 mins)
 
   clientId: string;
   companyId: string;
