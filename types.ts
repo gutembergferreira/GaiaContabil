@@ -4,8 +4,18 @@ export type Department = 'Contábil' | 'Fiscal' | 'Pessoal' | 'Legalização';
 
 export type DocCategory = string;
 
+// Changed to object to support price/config
+export interface RequestTypeConfig {
+  id: string;
+  name: string;
+  price: number; // 0 = free
+}
+
 export type DocStatus = 'Enviado' | 'Visualizado';
 export type PaymentStatus = 'Pago' | 'Aberto' | 'N/A';
+
+export type RequestStatus = 'Pendente Pagamento' | 'Pagamento em Análise' | 'Solicitada' | 'Visualizada' | 'Em Resolução' | 'Em Validação' | 'Resolvido';
+export type RequestPaymentStatus = 'Pendente' | 'Em Análise' | 'Aprovado' | 'N/A';
 
 export interface ChatMessage {
   id: string;
@@ -49,16 +59,31 @@ export interface Document {
   date: string; // ISO date
   companyId: string;
   url?: string;
-  
-  // Status workflow
   status: DocStatus;
-  paymentStatus: PaymentStatus; // Only for Boletos/Impostos
-
-  // Metadata
+  paymentStatus: PaymentStatus; 
   amount?: number;
-  competence?: string; // MM/YYYY
+  competence?: string; 
+  chat: ChatMessage[];
+  auditLog: AuditLog[];
+}
 
-  // Interactions
+export interface ServiceRequest {
+  id: string;
+  protocol: string; // e.g., SRV-2024-001
+  title: string;
+  type: string; // Name of the type
+  price: number;
+  description: string;
+  
+  status: RequestStatus;
+  paymentStatus: RequestPaymentStatus;
+  proofUrl?: string; // Mock URL for uploaded receipt
+
+  clientId: string;
+  companyId: string;
+  createdAt: string;
+  updatedAt: string;
+  deleted: boolean; // Soft delete
   chat: ChatMessage[];
   auditLog: AuditLog[];
 }

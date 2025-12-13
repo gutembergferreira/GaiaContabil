@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  LayoutDashboard, FileText, Users, Bell, Settings, LogOut, Briefcase, Building2, Menu, X, UserCircle, ChevronDown
+  LayoutDashboard, FileText, Users, Bell, Settings, LogOut, Briefcase, Building2, Menu, X, UserCircle, ChevronDown, MessageSquare
 } from 'lucide-react';
 import { Role, Company, User } from '../types';
 import { getCompanies, getUsers, getNotifications, markNotificationRead } from '../services/mockData';
@@ -42,13 +42,15 @@ const Layout: React.FC<LayoutProps> = ({
   const adminMenu = [
     { id: 'dashboard', label: 'Visão Geral', icon: LayoutDashboard },
     { id: 'routines', label: 'Rotinas Mensais', icon: FileText },
-    { id: 'documents', label: 'Arquivos', icon: FileText }, // Added for Admin
+    { id: 'documents', label: 'Arquivos', icon: FileText }, 
+    { id: 'requests', label: 'Solicitações', icon: MessageSquare }, // New
     { id: 'communication', label: 'Comunicados', icon: Briefcase },
     { id: 'settings', label: 'Configurações', icon: Settings },
   ];
 
   const clientMenu = [
     { id: 'dashboard', label: 'Meu Painel', icon: LayoutDashboard },
+    { id: 'requests', label: 'Solicitações / Pedidos', icon: MessageSquare }, // New
     { id: 'documents', label: 'Arquivos', icon: FileText },
     { id: 'hr', label: 'Depto. Pessoal', icon: Users },
   ];
@@ -56,6 +58,13 @@ const Layout: React.FC<LayoutProps> = ({
   const menuItems = role === 'admin' ? adminMenu : clientMenu;
 
   const currentCompanyName = companies.find(c => c.id === currentCompanyId)?.name || 'Empresa';
+
+  const handleNotificationClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    setShowNotifDropdown(false);
+    setCurrentPage('notifications');
+  };
 
   return (
     <div className="flex h-screen bg-slate-100 overflow-hidden">
@@ -200,16 +209,12 @@ const Layout: React.FC<LayoutProps> = ({
                 <div className="absolute right-0 mt-2 w-80 bg-white rounded-xl shadow-xl border border-slate-100 overflow-hidden z-50">
                    <div className="p-3 border-b border-slate-100 bg-slate-50 font-semibold text-slate-700 flex justify-between items-center">
                      <span>Notificações</span>
-                     <button 
-                      onClick={(e) => {
-                        e.stopPropagation(); // Prevent dropdown from closing immediately if checking click outside
-                        setShowNotifDropdown(false);
-                        setCurrentPage('notifications');
-                      }}
+                     <div 
+                      onClick={handleNotificationClick}
                       className="text-xs text-blue-600 hover:underline cursor-pointer"
                     >
                       Ver todas
-                    </button>
+                    </div>
                    </div>
                    <div className="max-h-64 overflow-y-auto">
                       {notifications.length === 0 ? (

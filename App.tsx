@@ -8,6 +8,7 @@ import CommunicationCenter from './components/CommunicationCenter';
 import SettingsManager from './components/SettingsManager';
 import NotificationPage from './components/NotificationPage';
 import MonthlyRoutines from './components/MonthlyRoutines';
+import RequestManager from './components/RequestManager';
 import UserProfile from './components/UserProfile';
 import { Role, User } from './types';
 import { getUsers, updateUser } from './services/mockData';
@@ -45,6 +46,8 @@ const App: React.FC = () => {
         return <MonthlyRoutines />; 
       case 'documents':
         return <DocumentVault role={role} currentCompanyId={currentCompanyId} currentUser={currentUser} />;
+      case 'requests':
+        return <RequestManager role={role} currentUser={currentUser} currentCompanyId={currentCompanyId} />;
       case 'hr':
         return <HRManagement role={role} />;
       case 'communication':
