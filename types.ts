@@ -65,6 +65,14 @@ export interface User {
   phone?: string;
 }
 
+export interface RequestAttachment {
+  id: string;
+  name: string;
+  url: string; // Mock URL
+  uploadedBy: string; // User name
+  createdAt: string;
+}
+
 export interface Document {
   id: string;
   title: string;
@@ -76,6 +84,7 @@ export interface Document {
   paymentStatus: PaymentStatus; 
   amount?: number;
   competence?: string; 
+  attachments?: RequestAttachment[]; // Added to match Request structure
   chat: ChatMessage[];
   auditLog: AuditLog[];
 }
@@ -101,6 +110,7 @@ export interface ServiceRequest {
   createdAt: string;
   updatedAt: string;
   deleted: boolean; // Soft delete
+  attachments: RequestAttachment[]; // Added attachments
   chat: ChatMessage[];
   auditLog: AuditLog[];
 }

@@ -60,6 +60,7 @@ const Layout: React.FC<LayoutProps> = ({
 
   const adminMenu = [
     { id: 'dashboard', label: 'Visão Geral', icon: LayoutDashboard },
+    { id: 'notifications', label: 'Notificações', icon: Bell, badge: unreadCount }, // Menu Item Added
     { id: 'routines', label: 'Rotinas Mensais', icon: FileText },
     { id: 'documents', label: 'Arquivos', icon: FileText, badge: 0 }, 
     { id: 'requests', label: 'Solicitações', icon: MessageSquare, badge: reqCount }, 
@@ -69,6 +70,7 @@ const Layout: React.FC<LayoutProps> = ({
 
   const clientMenu = [
     { id: 'dashboard', label: 'Meu Painel', icon: LayoutDashboard },
+    { id: 'notifications', label: 'Notificações', icon: Bell, badge: unreadCount }, // Menu Item Added
     { id: 'requests', label: 'Solicitações / Pedidos', icon: MessageSquare, badge: reqCount }, 
     { id: 'documents', label: 'Arquivos', icon: FileText, badge: docCount },
     { id: 'hr', label: 'Depto. Pessoal', icon: Users, badge: 0 }, // Placeholder badge for HR logic

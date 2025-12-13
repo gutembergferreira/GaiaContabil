@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { getDocuments, addDocument, updateDocument, addDocumentMessage, addAuditLog, getCategories } from '../services/mockData';
-import { Document, Role, DocCategory, ChatMessage } from '../types';
-import { FileText, Download, CheckCircle, Upload, Filter, Building, CreditCard, MessageCircle, Clock, Eye, Send, X, Plus } from 'lucide-react';
+import { getDocuments, addDocument, updateDocument, addDocumentMessage, addAuditLog, getCategories, deleteDocument } from '../services/mockData';
+import { Document, Role, ChatMessage } from '../types';
+import { FileText, Download, Upload, Clock, Eye, Send, X, Trash2, MessageCircle, Paperclip } from 'lucide-react';
 
 interface DocumentVaultProps {
   role: Role;
@@ -76,8 +76,10 @@ const DocumentVault: React.FC<DocumentVaultProps> = ({ role, currentCompanyId, c
          status: 'Enviado',
          paymentStatus: (uploadData.category === 'Boletos' || uploadData.category === 'Impostos') ? 'Aberto' : 'N/A',
          amount: uploadData.amount,
+         url: '#', // Mock URL
          chat: [],
-         auditLog: [{ id: Date.now().toString(), action: 'Upload', user: currentUser.name, timestamp: new Date().toISOString() }]
+         auditLog: [{ id: Date.now().toString(), action: 'Upload', user: currentUser.name, timestamp: new Date().toISOString() }],
+         attachments: [] // Initialize empty
      };
      addDocument(newDoc);
      setIsUploadOpen(false);
@@ -116,7 +118,17 @@ const DocumentVault: React.FC<DocumentVaultProps> = ({ role, currentCompanyId, c
      addDocumentMessage(selectedDoc.id, msg);
      setChatInput('');
      // Refresh selected doc to show new message
-     setSelectedDoc({ ...selectedDoc, chat: [...selectedDoc.chat, msg] });
+     const updatedDoc = getDocuments(currentCompanyId).find(d => d.id === selectedDoc.id);
+     if(updatedDoc) setSelectedDoc({...updatedDoc});
+  };
+
+  const handleDeleteDocument = (id: string, e: React.MouseEvent) => {
+      e.stopPropagation();
+      if(confirm('Tem certeza que deseja excluir este arquivo?')) {
+          deleteDocument(id);
+          setDocuments(getDocuments(currentCompanyId));
+          if(selectedDoc?.id === id) setSelectedDoc(null);
+      }
   };
 
   return (
@@ -187,7 +199,16 @@ const DocumentVault: React.FC<DocumentVaultProps> = ({ role, currentCompanyId, c
       {/* Document List */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
          {filteredDocs.map(doc => (
-            <div key={doc.id} className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 hover:shadow-md transition-shadow cursor-pointer" onClick={() => openDocument(doc)}>
+            <div key={doc.id} className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 hover:shadow-md transition-shadow cursor-pointer relative group" onClick={() => openDocument(doc)}>
+               {role === 'admin' && (
+                   <button 
+                       onClick={(e) => handleDeleteDocument(doc.id, e)} 
+                       className="absolute top-2 right-2 p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded hidden group-hover:block"
+                       title="Excluir Arquivo"
+                   >
+                       <Trash2 size={16} />
+                   </button>
+               )}
                <div className="flex justify-between items-start mb-3">
                   <div className={`p-2 rounded-lg ${doc.category === 'Boletos' ? 'bg-green-100 text-green-600' : 'bg-blue-100 text-blue-600'}`}>
                       <FileText size={24} />
@@ -197,7 +218,7 @@ const DocumentVault: React.FC<DocumentVaultProps> = ({ role, currentCompanyId, c
                       {doc.status === 'Visualizado' && <span className="bg-blue-50 text-blue-600 text-[10px] px-2 py-1 rounded-full font-bold flex items-center gap-1"><Eye size={10}/> Visto</span>}
                   </div>
                </div>
-               <h3 className="font-semibold text-slate-800 truncate" title={doc.title}>{doc.title}</h3>
+               <h3 className="font-semibold text-slate-800 truncate pr-6" title={doc.title}>{doc.title}</h3>
                <p className="text-xs text-slate-500 mb-2">{new Date(doc.date).toLocaleDateString()}</p>
                
                {(doc.category === 'Boletos' || doc.category === 'Impostos') && (
@@ -287,11 +308,48 @@ const DocumentVault: React.FC<DocumentVaultProps> = ({ role, currentCompanyId, c
                          )}
                       </div>
 
-                      <div className="mb-6">
-                        <button className="w-full bg-blue-50 text-blue-600 py-3 rounded-lg font-medium flex items-center justify-center gap-2 hover:bg-blue-100 transition-colors">
-                           <Download size={20} /> Baixar Arquivo
-                        </button>
-                      </div>
+                       {/* Attachments Section - Mirrored from Requests */}
+                       <div className="mb-6">
+                            <div className="flex justify-between items-center mb-2">
+                                <h4 className="font-bold text-slate-800 flex items-center gap-2"><Paperclip size={16}/> Anexos / Arquivos</h4>
+                            </div>
+                            
+                            {(!selectedDoc.attachments || selectedDoc.attachments.length === 0) ? (
+                                // Fallback for basic docs that use 'url' property or have no attachments
+                                <div className="space-y-2">
+                                     <button 
+                                        onClick={() => alert("Download iniciado...")}
+                                        className="w-full bg-blue-50 text-blue-600 py-3 rounded-lg font-medium flex items-center justify-center gap-2 hover:bg-blue-100 transition-colors"
+                                    >
+                                    <Download size={20} /> Baixar Arquivo Principal
+                                    </button>
+                                    {selectedDoc.attachments && selectedDoc.attachments.length === 0 && (
+                                        <p className="text-xs text-center text-slate-400 mt-2">Nenhum anexo extra.</p>
+                                    )}
+                                </div>
+                            ) : (
+                                <div className="space-y-2">
+                                    {selectedDoc.attachments.map(att => (
+                                        <div key={att.id} className="flex items-center justify-between p-3 bg-white border border-slate-200 rounded-lg hover:shadow-sm">
+                                            <div className="flex items-center gap-3 overflow-hidden">
+                                                <div className="p-2 bg-blue-50 text-blue-600 rounded">
+                                                    <FileText size={16}/>
+                                                </div>
+                                                <div className="overflow-hidden">
+                                                    <p className="text-sm font-medium text-slate-800 truncate">{att.name}</p>
+                                                    <p className="text-xs text-slate-500">Enviado por {att.uploadedBy} em {new Date(att.createdAt).toLocaleDateString()}</p>
+                                                </div>
+                                            </div>
+                                            <div className="flex gap-2">
+                                                <button onClick={() => alert(`Baixando ${att.name}...`)} className="text-blue-600 hover:text-blue-800 p-2" title="Baixar">
+                                                    <Download size={16}/>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                       </div>
 
                       <div className="mb-6">
                           <h4 className="font-bold text-slate-800 mb-2 flex items-center gap-2"><Clock size={16}/> Histórico de Auditoria</h4>

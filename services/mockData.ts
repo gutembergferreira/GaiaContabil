@@ -1,4 +1,4 @@
-import { Routine, Document, Company, User, Notification, ChatMessage, AuditLog, ServiceRequest, RequestTypeConfig, PaymentConfig } from '../types';
+import { Routine, Document, Company, User, Notification, ChatMessage, AuditLog, ServiceRequest, RequestTypeConfig, PaymentConfig, RequestAttachment } from '../types';
 
 // --- Initial Data ---
 
@@ -53,6 +53,7 @@ let SERVICE_REQUESTS: ServiceRequest[] = [
     description: 'Preciso da guia GPS ref 04/2024 atualizada para pagamento hoje.',
     status: 'Solicitada', paymentStatus: 'N/A', clientId: 'u2', companyId: 'c1', deleted: false,
     createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+    attachments: [],
     chat: [], auditLog: [{id: 'al1', action: 'Criação', user: 'Ana Empresária', timestamp: new Date().toISOString()}]
   }
 ];
@@ -160,6 +161,7 @@ export const deleteUser = (id: string) => { USERS = USERS.filter(x => x.id !== i
 export const getDocuments = (companyId: string) => DOCUMENTS.filter(d => d.companyId === companyId);
 export const addDocument = (d: Document) => { DOCUMENTS = [d, ...DOCUMENTS]; };
 export const updateDocument = (d: Document) => { DOCUMENTS = DOCUMENTS.map(x => x.id === d.id ? d : x); };
+export const deleteDocument = (id: string) => { DOCUMENTS = DOCUMENTS.filter(d => d.id !== id); };
 export const addDocumentMessage = (docId: string, msg: ChatMessage) => {
   const doc = DOCUMENTS.find(d => d.id === docId);
   if (doc) { doc.chat = [...doc.chat, msg]; updateDocument(doc); }
@@ -199,6 +201,36 @@ export const addServiceRequest = (req: ServiceRequest) => {
 
 export const updateServiceRequest = (req: ServiceRequest) => { 
   SERVICE_REQUESTS = SERVICE_REQUESTS.map(r => r.id === req.id ? req : r); 
+};
+
+export const addRequestAttachment = (reqId: string, attachment: RequestAttachment) => {
+  const req = SERVICE_REQUESTS.find(r => r.id === reqId);
+  if(req) {
+      if(!req.attachments) req.attachments = [];
+      req.attachments = [...req.attachments, attachment];
+      req.auditLog.push({ 
+          id: Date.now().toString(), 
+          action: `Anexo adicionado: ${attachment.name}`, 
+          user: attachment.uploadedBy, 
+          timestamp: new Date().toISOString() 
+      });
+      updateServiceRequest(req);
+  }
+};
+
+export const deleteRequestAttachment = (reqId: string, attId: string, user: string) => {
+  const req = SERVICE_REQUESTS.find(r => r.id === reqId);
+  if(req && req.attachments) {
+      const attName = req.attachments.find(a => a.id === attId)?.name;
+      req.attachments = req.attachments.filter(a => a.id !== attId);
+      req.auditLog.push({
+          id: Date.now().toString(),
+          action: `Anexo removido: ${attName}`,
+          user: user,
+          timestamp: new Date().toISOString()
+      });
+      updateServiceRequest(req);
+  }
 };
 
 export const softDeleteServiceRequest = (id: string, user: string) => {

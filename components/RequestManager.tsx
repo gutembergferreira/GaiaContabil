@@ -1,13 +1,13 @@
-import React, { useState, useEffect } from 'react';
-import { ServiceRequest, Role, User, ChatMessage, RequestTypeConfig, PaymentConfig, Document } from '../types';
+import React, { useState, useEffect, useRef } from 'react';
+import { ServiceRequest, Role, User, ChatMessage, RequestTypeConfig, PaymentConfig, Document, RequestAttachment } from '../types';
 import { 
     getServiceRequests, addServiceRequest, updateServiceRequest, softDeleteServiceRequest, 
     restoreServiceRequest, getRequestTypes, getDeletedServiceRequests, getPaymentConfig, generatePixCharge, simulateWebhookPayment,
-    addDocument
+    addDocument, addRequestAttachment, deleteRequestAttachment
 } from '../services/mockData';
 import { 
     Plus, Search, MessageSquare, Clock, CheckCircle, FileText, 
-    Send, X, Trash2, RotateCcw, Eye, CreditCard, QrCode, Upload, Download, AlertTriangle, Copy, RefreshCw
+    Send, X, Trash2, RotateCcw, Eye, CreditCard, QrCode, Upload, Download, AlertTriangle, Copy, RefreshCw, Paperclip, Layout
 } from 'lucide-react';
 
 interface RequestManagerProps {
@@ -23,7 +23,7 @@ const RequestManager: React.FC<RequestManagerProps> = ({ role, currentUser, curr
   const [paymentConfig, setPaymentConfig] = useState<PaymentConfig | null>(null);
   
   // UI State
-  const [view, setView] = useState<'list' | 'bin'>('list');
+  const [view, setView] = useState<'board' | 'bin'>('board');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedReq, setSelectedReq] = useState<ServiceRequest | null>(null);
   const [filterText, setFilterText] = useState('');
@@ -37,6 +37,18 @@ const RequestManager: React.FC<RequestManagerProps> = ({ role, currentUser, curr
 
   // Chat
   const [chatInput, setChatInput] = useState('');
+  
+  // File Upload Ref
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Kanban Columns Definition
+  const KANBAN_COLUMNS = [
+    { id: 'financeiro', label: 'Financeiro / Pagamento', statuses: ['Pendente Pagamento', 'Pagamento em Análise'], color: 'border-orange-500' },
+    { id: 'novos', label: 'Aberto', statuses: ['Solicitada', 'Visualizada'], color: 'border-blue-500' },
+    { id: 'execucao', label: 'Em Andamento', statuses: ['Em Resolução'], color: 'border-amber-500' },
+    { id: 'validacao', label: 'Validação', statuses: ['Em Validação'], color: 'border-purple-500' },
+    { id: 'concluido', label: 'Concluído', statuses: ['Resolvido'], color: 'border-emerald-500' },
+  ];
 
   // Polling for Webhook Simulation
   useEffect(() => {
@@ -90,6 +102,7 @@ const RequestManager: React.FC<RequestManagerProps> = ({ role, currentUser, curr
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
           deleted: false,
+          attachments: [],
           chat: [],
           auditLog: [{ id: Date.now().toString(), action: 'Solicitação Criada', user: currentUser.name, timestamp: new Date().toISOString() }]
       };
@@ -112,8 +125,10 @@ const RequestManager: React.FC<RequestManagerProps> = ({ role, currentUser, curr
               companyId: selectedReq.companyId,
               status: 'Enviado',
               paymentStatus: 'N/A',
-              chat: [],
-              auditLog: [{id: Date.now().toString(), action: 'Gerado automaticamente via Solicitação', user: 'Sistema', timestamp: new Date().toISOString()}]
+              url: '#', // Mock URL
+              chat: [...selectedReq.chat], // Copy Chat
+              auditLog: [...selectedReq.auditLog, {id: Date.now().toString(), action: 'Gerado automaticamente via Solicitação', user: 'Sistema', timestamp: new Date().toISOString()}],
+              attachments: [...selectedReq.attachments] // Copy Attachments
           };
           addDocument(newDoc);
           
@@ -202,6 +217,42 @@ const RequestManager: React.FC<RequestManagerProps> = ({ role, currentUser, curr
       setChatInput('');
   };
 
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+      if (!e.target.files || !e.target.files[0] || !selectedReq) return;
+      const file = e.target.files[0];
+      
+      const attachment: RequestAttachment = {
+          id: Date.now().toString(),
+          name: file.name,
+          url: '#', // Mock URL
+          uploadedBy: currentUser.name,
+          createdAt: new Date().toISOString()
+      };
+
+      addRequestAttachment(selectedReq.id, attachment);
+      
+      // Fix: Immediately fetch updated request and set state (spread object to trigger re-render)
+      const updatedReq = getServiceRequests(undefined, true).find(r => r.id === selectedReq.id);
+      if(updatedReq) {
+          setSelectedReq({ ...updatedReq });
+      }
+      
+      // Reset input
+      if(fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const handleDeleteAttachment = (attId: string) => {
+      if(!selectedReq) return;
+      if(confirm('Excluir este anexo?')) {
+          deleteRequestAttachment(selectedReq.id, attId, currentUser.name);
+          // Refresh state
+          const updatedReq = getServiceRequests(undefined, true).find(r => r.id === selectedReq.id);
+          if(updatedReq) {
+              setSelectedReq({ ...updatedReq });
+          }
+      }
+  };
+
   const openRequest = (req: ServiceRequest) => {
       if (role === 'admin' && req.status === 'Solicitada') {
           const updated = { ...req, status: 'Visualizada' as const };
@@ -216,9 +267,9 @@ const RequestManager: React.FC<RequestManagerProps> = ({ role, currentUser, curr
 
   const getStatusColor = (s: string) => {
       switch(s) {
-          case 'Pendente Pagamento': return 'bg-red-100 text-red-700';
+          case 'Pendente Pagamento': return 'bg-orange-100 text-orange-700';
           case 'Pagamento em Análise': return 'bg-orange-100 text-orange-700';
-          case 'Solicitada': return 'bg-slate-100 text-slate-700';
+          case 'Solicitada': return 'bg-blue-100 text-blue-700';
           case 'Visualizada': return 'bg-blue-100 text-blue-700';
           case 'Em Resolução': return 'bg-amber-100 text-amber-700';
           case 'Em Validação': return 'bg-purple-100 text-purple-700';
@@ -227,19 +278,12 @@ const RequestManager: React.FC<RequestManagerProps> = ({ role, currentUser, curr
       }
   };
 
-  // Filter List
-  const listToRender = view === 'bin' ? deletedRequests : requests;
-  const filteredList = listToRender.filter(r => 
-      r.title.toLowerCase().includes(filterText.toLowerCase()) || 
-      r.protocol.toLowerCase().includes(filterText.toLowerCase())
-  );
-
   return (
     <div className="space-y-6">
        <div className="flex flex-col md:flex-row justify-between items-center gap-4">
           <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
-             <MessageSquare className="text-blue-600"/>
-             {view === 'bin' ? 'Lixeira de Solicitações' : 'Solicitações e Pedidos'}
+             <Layout className="text-blue-600"/>
+             {view === 'bin' ? 'Lixeira de Solicitações' : 'Quadro de Solicitações'}
           </h2>
           
           <div className="flex gap-2">
@@ -250,16 +294,15 @@ const RequestManager: React.FC<RequestManagerProps> = ({ role, currentUser, curr
              )}
              {role === 'admin' && (
                  <div className="flex bg-white rounded-lg border border-slate-200 p-1">
-                     <button onClick={() => setView('list')} className={`px-3 py-1 rounded text-sm font-medium ${view === 'list' ? 'bg-slate-100 text-slate-800' : 'text-slate-500'}`}>Ativos</button>
+                     <button onClick={() => setView('board')} className={`px-3 py-1 rounded text-sm font-medium ${view === 'board' ? 'bg-slate-100 text-slate-800' : 'text-slate-500'}`}>Quadro</button>
                      <button onClick={() => setView('bin')} className={`px-3 py-1 rounded text-sm font-medium ${view === 'bin' ? 'bg-red-50 text-red-600' : 'text-slate-500'}`}>Lixeira</button>
                  </div>
              )}
           </div>
        </div>
 
-       {/* List View */}
-       <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-          <div className="p-4 border-b border-slate-100">
+       {/* Search Bar */}
+       <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
              <div className="relative max-w-md">
                  <Search className="absolute left-3 top-2.5 text-slate-400" size={18} />
                  <input 
@@ -270,55 +313,94 @@ const RequestManager: React.FC<RequestManagerProps> = ({ role, currentUser, curr
                     className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg text-sm"
                  />
              </div>
-          </div>
+       </div>
 
-          <table className="w-full text-sm text-left">
-             <thead className="bg-slate-50 text-slate-500 font-semibold uppercase text-xs">
-                <tr>
-                   <th className="px-6 py-4">Protocolo</th>
-                   <th className="px-6 py-4">Título / Tipo</th>
-                   <th className="px-6 py-4">Data</th>
-                   <th className="px-6 py-4">Status</th>
-                   <th className="px-6 py-4 text-right">Ações</th>
-                </tr>
-             </thead>
-             <tbody className="divide-y divide-slate-100">
-                {filteredList.length === 0 && (
-                    <tr><td colSpan={5} className="p-6 text-center text-slate-400">Nenhuma solicitação encontrada.</td></tr>
-                )}
-                {filteredList.map(req => (
-                    <tr key={req.id} className="hover:bg-slate-50 cursor-pointer" onClick={() => openRequest(req)}>
-                       <td className="px-6 py-4 font-mono text-slate-600">{req.protocol}</td>
-                       <td className="px-6 py-4">
-                          <p className="font-medium text-slate-900">{req.title}</p>
-                          <p className="text-xs text-slate-500">{req.type}</p>
-                          {req.price > 0 && <span className="text-xs text-green-600 font-bold">R$ {req.price.toFixed(2)}</span>}
-                       </td>
-                       <td className="px-6 py-4 text-slate-500">{new Date(req.createdAt).toLocaleDateString()}</td>
-                       <td className="px-6 py-4">
-                          <span className={`px-2 py-1 rounded-full text-xs font-bold ${getStatusColor(req.status)}`}>
-                             {req.status}
-                          </span>
-                       </td>
-                       <td className="px-6 py-4 text-right flex justify-end gap-2" onClick={e => e.stopPropagation()}>
-                          {view === 'list' ? (
-                              <>
-                                <button onClick={() => openRequest(req)} className="text-blue-600 hover:bg-blue-50 p-2 rounded"><Eye size={18}/></button>
-                                {role === 'admin' && (
-                                    <button onClick={() => handleDelete(req.id)} className="text-red-500 hover:bg-red-50 p-2 rounded"><Trash2 size={18}/></button>
-                                )}
-                              </>
-                          ) : (
-                              <button onClick={() => handleRestore(req.id)} className="text-green-600 hover:bg-green-50 p-2 rounded flex items-center gap-1">
+       {/* KANBAN BOARD VIEW */}
+       {view === 'board' && (
+           <div className="flex overflow-x-auto gap-4 pb-4 min-h-[600px]">
+               {KANBAN_COLUMNS.map(column => {
+                   const columnRequests = requests.filter(r => 
+                       column.statuses.includes(r.status) && 
+                       (r.title.toLowerCase().includes(filterText.toLowerCase()) || r.protocol.toLowerCase().includes(filterText.toLowerCase()))
+                   );
+
+                   return (
+                       <div key={column.id} className="min-w-[300px] w-[320px] bg-slate-100 rounded-xl p-3 flex flex-col h-full">
+                           <div className={`border-l-4 ${column.color} pl-3 mb-3 bg-white p-2 rounded shadow-sm`}>
+                               <h3 className="font-bold text-slate-700 text-sm uppercase">{column.label}</h3>
+                               <span className="text-xs text-slate-500">{columnRequests.length} pedidos</span>
+                           </div>
+                           
+                           <div className="flex-1 space-y-3 overflow-y-auto">
+                               {columnRequests.map(req => (
+                                   <div 
+                                      key={req.id} 
+                                      onClick={() => openRequest(req)}
+                                      className="bg-white p-4 rounded-lg shadow-sm border border-slate-200 cursor-pointer hover:shadow-md transition-all group relative"
+                                   >
+                                       {role === 'admin' && (
+                                           <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                               <button onClick={(e) => {e.stopPropagation(); handleDelete(req.id)}} className="text-red-400 hover:text-red-600 p-1"><Trash2 size={14}/></button>
+                                           </div>
+                                       )}
+                                       <div className="flex justify-between items-start mb-2">
+                                           <span className="text-[10px] font-mono bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded">{req.protocol}</span>
+                                           {req.price > 0 && <span className="text-xs font-bold text-green-600">R$ {req.price}</span>}
+                                       </div>
+                                       <h4 className="font-semibold text-slate-800 text-sm mb-1">{req.title}</h4>
+                                       <p className="text-xs text-slate-500 mb-2">{req.type}</p>
+                                       <div className="flex items-center justify-between text-xs text-slate-400 border-t border-slate-50 pt-2">
+                                           <span>{new Date(req.createdAt).toLocaleDateString()}</span>
+                                           <span className={`px-2 py-0.5 rounded-full ${getStatusColor(req.status)} text-[10px]`}>{req.status}</span>
+                                       </div>
+                                   </div>
+                               ))}
+                               {columnRequests.length === 0 && (
+                                   <div className="text-center p-4 text-slate-400 text-xs italic border-2 border-dashed border-slate-200 rounded-lg">
+                                       Vazio
+                                   </div>
+                               )}
+                           </div>
+                       </div>
+                   );
+               })}
+           </div>
+       )}
+
+       {/* BIN VIEW (Table for deleted items) */}
+       {view === 'bin' && (
+           <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+              <table className="w-full text-sm text-left">
+                 <thead className="bg-slate-50 text-slate-500 font-semibold uppercase text-xs">
+                    <tr>
+                       <th className="px-6 py-4">Protocolo</th>
+                       <th className="px-6 py-4">Título</th>
+                       <th className="px-6 py-4">Data</th>
+                       <th className="px-6 py-4">Status</th>
+                       <th className="px-6 py-4 text-right">Ações</th>
+                    </tr>
+                 </thead>
+                 <tbody className="divide-y divide-slate-100">
+                    {deletedRequests.length === 0 && (
+                        <tr><td colSpan={5} className="p-6 text-center text-slate-400">Lixeira vazia.</td></tr>
+                    )}
+                    {deletedRequests.map(req => (
+                        <tr key={req.id} className="hover:bg-slate-50">
+                           <td className="px-6 py-4 font-mono text-slate-600">{req.protocol}</td>
+                           <td className="px-6 py-4">{req.title}</td>
+                           <td className="px-6 py-4 text-slate-500">{new Date(req.createdAt).toLocaleDateString()}</td>
+                           <td className="px-6 py-4">{req.status}</td>
+                           <td className="px-6 py-4 text-right">
+                              <button onClick={() => handleRestore(req.id)} className="text-green-600 hover:bg-green-50 p-2 rounded flex items-center gap-1 ml-auto">
                                   <RotateCcw size={16}/> Restaurar
                               </button>
-                          )}
-                       </td>
-                    </tr>
-                ))}
-             </tbody>
-          </table>
-       </div>
+                           </td>
+                        </tr>
+                    ))}
+                 </tbody>
+              </table>
+           </div>
+       )}
 
        {/* Create Modal */}
        {isModalOpen && (
@@ -515,6 +597,61 @@ const RequestManager: React.FC<RequestManagerProps> = ({ role, currentUser, curr
                            <p className="text-slate-600 text-sm leading-relaxed whitespace-pre-wrap p-4 bg-slate-50 rounded-lg border border-slate-100">
                                {selectedReq.description}
                            </p>
+                       </div>
+
+                       {/* Attachments Section */}
+                       <div className="mb-6">
+                            <div className="flex justify-between items-center mb-2">
+                                <h4 className="font-bold text-slate-800 flex items-center gap-2"><Paperclip size={16}/> Anexos</h4>
+                                {role === 'admin' && !selectedReq.deleted && (
+                                    <>
+                                        <input 
+                                            type="file" 
+                                            ref={fileInputRef} 
+                                            className="hidden" 
+                                            onChange={handleFileUpload}
+                                        />
+                                        <button 
+                                            onClick={() => fileInputRef.current?.click()}
+                                            className="text-xs bg-slate-100 text-slate-600 px-2 py-1 rounded hover:bg-slate-200 flex items-center gap-1"
+                                        >
+                                            <Upload size={12}/> Adicionar
+                                        </button>
+                                    </>
+                                )}
+                            </div>
+                            
+                            {(!selectedReq.attachments || selectedReq.attachments.length === 0) ? (
+                                <div className="text-sm text-slate-400 bg-slate-50 p-4 rounded-lg border border-slate-100 italic">
+                                    Nenhum arquivo anexado.
+                                </div>
+                            ) : (
+                                <div className="space-y-2">
+                                    {selectedReq.attachments.map(att => (
+                                        <div key={att.id} className="flex items-center justify-between p-3 bg-white border border-slate-200 rounded-lg hover:shadow-sm">
+                                            <div className="flex items-center gap-3 overflow-hidden">
+                                                <div className="p-2 bg-blue-50 text-blue-600 rounded">
+                                                    <FileText size={16}/>
+                                                </div>
+                                                <div className="overflow-hidden">
+                                                    <p className="text-sm font-medium text-slate-800 truncate">{att.name}</p>
+                                                    <p className="text-xs text-slate-500">Enviado por {att.uploadedBy} em {new Date(att.createdAt).toLocaleDateString()}</p>
+                                                </div>
+                                            </div>
+                                            <div className="flex gap-2">
+                                                <button onClick={() => alert(`Baixando ${att.name}...`)} className="text-blue-600 hover:text-blue-800 p-2" title="Baixar">
+                                                    <Download size={16}/>
+                                                </button>
+                                                {role === 'admin' && (
+                                                    <button onClick={() => handleDeleteAttachment(att.id)} className="text-red-500 hover:text-red-700 p-2" title="Excluir">
+                                                        <Trash2 size={16}/>
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
                        </div>
 
                        <div>
