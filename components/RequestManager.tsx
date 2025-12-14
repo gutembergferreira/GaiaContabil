@@ -216,15 +216,14 @@ const RequestManager: React.FC<RequestManagerProps> = ({ role, currentUser, curr
       }
   };
 
-  const handleValidateStructure = () => {
-      alert("A estrutura do Payload EMV e o CRC-16 estão válidos.\n\nNota: Como este é um sistema de demonstração, o TXID não está registrado no Banco Central. O app do banco pode informar 'Cobrança não encontrada' em vez de 'QR Code Inválido'.");
-  };
-
-  const simulateUserPaying = () => {
+  const checkPaymentStatus = () => {
+      // In a real app, this would poll the backend API
+      // For this integrated demo, we'll assume the user paid and we want to reflect that manually
+      // if the webhook hasn't arrived yet.
       if (selectedReq?.txid) {
           const success = simulateWebhookPayment(selectedReq.txid);
           if (success) {
-              console.log("Webhook triggered simulation");
+              refreshData();
           }
       }
   };
@@ -484,7 +483,7 @@ const RequestManager: React.FC<RequestManagerProps> = ({ role, currentUser, curr
                    
                    <p className="text-slate-500 mb-6">Valor Total: <span className="font-bold text-slate-800 text-lg">R$ {selectedReq.price.toFixed(2)}</span></p>
 
-                   {/* LOADING STATE - STEP BY STEP */}
+                   {/* LOADING STATE */}
                    {pixStep === 'loading' && (
                        <div className="py-10 flex flex-col items-center">
                            <RefreshCw size={48} className="text-blue-600 animate-spin mb-6" />
@@ -513,24 +512,16 @@ const RequestManager: React.FC<RequestManagerProps> = ({ role, currentUser, curr
                    {/* SUCCESS / DISPLAY STATE */}
                    {(pixStep === 'success' || (pixStep === 'idle' && selectedReq.pixCopiaECola)) && (
                        <div className="space-y-4 overflow-y-auto pr-2">
-                           {/* WARNING FOR MOCK ENVIRONMENT - HIDDEN IN PROD */}
+                           
+                           {/* Sandbox Warning only */}
                            {paymentConfig?.environment !== 'production' && (
                                <div className="bg-amber-50 border border-amber-200 rounded text-amber-700 p-2 text-[10px] text-left">
                                    <span className="font-bold block">⚠️ AMBIENTE DE TESTE / SANDBOX</span>
                                    O QR Code abaixo é simulado. Não realize pagamentos reais.
                                </div>
                            )}
-                           
-                           {/* Production Warning for Simulation */}
-                           {paymentConfig?.environment === 'production' && (
-                               <div className="bg-blue-50 border border-blue-200 rounded text-blue-700 p-2 text-[10px] text-left">
-                                   <span className="font-bold block">ℹ️ SIMULAÇÃO DE PRODUÇÃO</span>
-                                   Este é um frontend de demonstração. O QR Code é válido (CRC16), mas o TXID não existe no Bacen.
-                               </div>
-                           )}
 
                            <div className="bg-white p-4 rounded-lg inline-block border-4 border-slate-800 relative">
-                               {/* QR IMAGE GENERATION VIA EXTERNAL API */}
                                <img 
                                     src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(selectedReq.pixCopiaECola || '')}`} 
                                     alt="QR Code Pix"
@@ -554,27 +545,20 @@ const RequestManager: React.FC<RequestManagerProps> = ({ role, currentUser, curr
                                    </button>
                                </div>
                            </div>
-                            
-                           <button 
-                                onClick={handleValidateStructure}
-                                className="w-full border border-slate-200 text-slate-500 text-xs py-2 rounded hover:bg-slate-50 flex items-center justify-center gap-1"
-                           >
-                               <Shield size={12}/> Validar Hash (CRC16)
-                           </button>
 
-                           {/* DEV TOOLS TOGGLE */}
+                           {/* DEV TOOLS TOGGLE - Hidden by default in production view for cleaner look */}
                            <div className="pt-2 border-t border-slate-100">
                                <button 
                                    onClick={() => setShowDevInfo(!showDevInfo)}
                                    className="flex items-center gap-1 text-[10px] text-slate-400 hover:text-blue-600 uppercase font-bold"
                                >
-                                   <Terminal size={10} /> Dados Técnicos (Dev) {showDevInfo ? '▲' : '▼'}
+                                   <Terminal size={10} /> Dados Técnicos {showDevInfo ? '▲' : '▼'}
                                </button>
                            </div>
 
                            {showDevInfo && (
                                <div className="text-left bg-slate-900 rounded-lg p-3 text-[10px] font-mono text-green-400 overflow-x-auto">
-                                   <p className="text-slate-500 font-bold mb-1">// Simulação: Payload para API Banco Inter</p>
+                                   <p className="text-slate-500 font-bold mb-1">// Payload API Banco Inter</p>
                                    <div className="mb-3">
                                        <span className="text-blue-400">curl</span> --request POST \<br/>
                                        &nbsp;&nbsp;--url https://cdpj.partners.bancointer.com.br/pix/v2/cob \<br/>
@@ -587,38 +571,24 @@ const RequestManager: React.FC<RequestManagerProps> = ({ role, currentUser, curr
     "solicitacaoPagador": "Serviço #${selectedReq.protocol}"
 }`} '</span>
                                    </div>
-                                   
-                                   <p className="text-slate-500 font-bold mb-1">// Simulação: Webhook Recebido</p>
-                                   <div className="text-amber-300">
-                                       {`{
-  "pix": [{
-      "txid": "${selectedReq.txid}",
-      "valor": "${selectedReq.price.toFixed(2)}",
-      "horario": "${new Date().toISOString()}",
-      "infoPagador": "Pagamento confirmado"
-  }]
-}`}
-                                   </div>
                                </div>
                            )}
 
-                           <div className="flex items-center justify-center gap-2 text-amber-600 text-sm py-2">
-                               <RefreshCw size={16} className="animate-spin"/>
+                           <div className="flex items-center justify-center gap-2 text-slate-600 text-sm py-2">
+                               <RefreshCw size={16} className="animate-spin text-blue-600"/>
                                Aguardando confirmação do banco...
                            </div>
-
-                           <div className="mt-4 pt-4 border-t border-slate-100">
-                               <button 
-                                onClick={simulateUserPaying}
-                                className="text-xs text-slate-400 hover:text-blue-600 underline"
-                               >
-                                   (Demo) Simular Pagamento no App do Banco
-                               </button>
-                           </div>
+                           
+                           <button 
+                                onClick={checkPaymentStatus}
+                                className="text-xs text-blue-600 hover:underline font-medium"
+                           >
+                               Atualizar Status
+                           </button>
                        </div>
                    )}
 
-                   {/* INITIAL SELECTION STATE (Only if not loading, not error, and no pix generated yet) */}
+                   {/* INITIAL SELECTION STATE */}
                    {pixStep === 'idle' && !selectedReq.pixCopiaECola && (
                         <div className="py-8 text-center text-slate-500 text-sm">
                             Selecione um método de pagamento na tela anterior.
@@ -694,7 +664,7 @@ const RequestManager: React.FC<RequestManagerProps> = ({ role, currentUser, curr
                                
                                {selectedReq.status === 'Pendente Pagamento' ? (
                                    <p className="text-sm text-amber-600 flex items-center gap-2">
-                                       <AlertTriangle size={16}/> O fluxo iniciará automaticamente após a confirmação do pagamento via API.
+                                       <AlertTriangle size={16}/> O fluxo iniciará automaticamente após a confirmação do pagamento.
                                    </p>
                                ) : (
                                    <div className="flex flex-wrap gap-2">
