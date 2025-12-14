@@ -1,8 +1,8 @@
 import { Routine, Document, Company, User, Notification, ChatMessage, AuditLog, ServiceRequest, RequestTypeConfig, PaymentConfig, RequestAttachment } from '../types';
 
-// --- MOCK DATA STRUCTURES (UI Scaffolding) ---
-// Note: In a full prod app, these would all come from the DB. 
-// For this demo, we keep them in memory but fix the critical parts (DB Config & Payment Config) to be real/persistent.
+// ... (Existing MOCK DATA Structures remain for UI scaffolding) ...
+// Mantendo as estruturas de dados mockados para o Frontend funcionar visualmente
+// enquanto o backend cuida das partes críticas (Pix/Banco).
 
 let CATEGORIES: string[] = ['Boletos', 'Impostos', 'Folha', 'Contratos', 'Documentos Solicitados', 'Outros'];
 
@@ -14,12 +14,9 @@ let REQUEST_TYPES: RequestTypeConfig[] = [
   { id: 'rt5', name: 'Certidão Negativa Extra', price: 50.00 },
 ];
 
-// Load Payment Config from LocalStorage to persist across reloads
 const loadPaymentConfig = (): PaymentConfig => {
     const saved = localStorage.getItem('maat_payment_config');
-    if (saved) {
-        return JSON.parse(saved);
-    }
+    if (saved) return JSON.parse(saved);
     return {
         environment: 'sandbox',
         enablePix: false,
@@ -36,7 +33,7 @@ let COMPANIES: Company[] = [
 ];
 
 let USERS: User[] = [
-  { id: 'u1', name: 'Carlos Contador', email: 'admin@maat.com', role: 'admin', password: 'admin' }, // Matching Login.tsx
+  { id: 'u1', name: 'Carlos Contador', email: 'admin@maat.com', role: 'admin', password: 'admin' },
   { id: 'u2', name: 'Ana Empresária', email: 'ana@servicos.com', role: 'client', companyId: 'c1', password: '123' },
   { id: 'u3', name: 'Roberto Varejo', email: 'roberto@varejo.com', role: 'client', companyId: 'c2', password: '123' }
 ];
@@ -76,27 +73,51 @@ const API_URL = 'http://localhost:3001/api';
 
 export const getPaymentConfig = () => PAYMENT_CONFIG;
 export const updatePaymentConfig = (config: PaymentConfig) => { 
-    PAYMENT_CONFIG = config;
+    PAYMENT_CONFIG = config; 
     localStorage.setItem('maat_payment_config', JSON.stringify(config));
 };
 
-// Test Connection: Now checks if we can talk to our Backend
+// TESTE REAL DE CONEXÃO
 export const testPixConnection = async (): Promise<{success: boolean, message: string, logs: string[]}> => {
     try {
-        // We do a simple fetch to a non-existent endpoint or a health check on backend
-        // Since we don't have a specific 'test' endpoint on server.js, we assume if fetch works, connection is OK.
-        // But better: Check if certs exist via a call? 
-        // For now, we trust the upload process.
-        
-        if (!PAYMENT_CONFIG.inter.clientId) return { success: false, message: 'Client ID não preenchido.', logs: [] };
+        if (!PAYMENT_CONFIG.inter.clientId || !PAYMENT_CONFIG.inter.clientSecret) {
+            return { success: false, message: 'Preencha Client ID e Secret antes de testar.', logs: [] };
+        }
 
-        return { success: true, message: 'Backend Online e Configurações Salvas Localmente.', logs: ['OK'] };
-    } catch (e) {
-        return { success: false, message: 'Não foi possível contatar o servidor na porta 3001.', logs: [] };
+        const response = await fetch(`${API_URL}/test-inter`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                clientId: PAYMENT_CONFIG.inter.clientId,
+                clientSecret: PAYMENT_CONFIG.inter.clientSecret
+            })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            return { 
+                success: true, 
+                message: 'Sucesso! Token gerado e Certificados Validados.', 
+                logs: [data.message, ...data.logs] 
+            };
+        } else {
+            return { 
+                success: false, 
+                message: `Erro Banco Inter: ${data.message}`, 
+                logs: data.logs || []
+            };
+        }
+    } catch (e: any) {
+        return { 
+            success: false, 
+            message: 'Erro de comunicação com o servidor local (3001).', 
+            logs: [e.message] 
+        };
     }
 };
 
-// --- REAL PIX GENERATION VIA BACKEND ---
+// GERAÇÃO REAL DE PIX
 export const generatePixCharge = async (reqId: string, amount: number): Promise<{txid: string, pixCopiaECola: string}> => {
   const req = SERVICE_REQUESTS.find(r => r.id === reqId);
   const client = USERS.find(u => u.id === req?.clientId);
@@ -106,7 +127,6 @@ export const generatePixCharge = async (reqId: string, amount: number): Promise<
   }
 
   try {
-      // Calls the Node.js backend which handles the mTLS certificate part
       const response = await fetch(`${API_URL}/pix`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -118,7 +138,7 @@ export const generatePixCharge = async (reqId: string, amount: number): Promise<
               protocol: req?.protocol || 'REQ',
               requestData: {
                   name: client?.name || 'Cliente Demo',
-                  cpf: '000.000.000-00' // Mock CPF for safety in demo
+                  cpf: '000.000.000-00' 
               }
           })
       });
@@ -129,7 +149,6 @@ export const generatePixCharge = async (reqId: string, amount: number): Promise<
           throw new Error(data.error || 'Erro na resposta do servidor.');
       }
 
-      // Update Local State with Real Data returned from Inter via Backend
       if (req) {
           req.txid = data.txid;
           req.pixCopiaECola = data.pixCopiaECola;
@@ -168,7 +187,7 @@ export const simulateWebhookPayment = (txid: string) => {
   return false;
 };
 
-// ... (Rest of CRUD functions for UI - keeping local arrays for this scope to avoid complexity overload) ...
+// ... (Rest of CRUD functions same as before) ...
 export const getCategories = () => CATEGORIES;
 export const addCategory = (cat: string) => { if(!CATEGORIES.includes(cat)) CATEGORIES = [...CATEGORIES, cat]; };
 export const deleteCategory = (cat: string) => { CATEGORIES = CATEGORIES.filter(c => c !== cat); };

@@ -9,79 +9,62 @@ export interface DbConfig {
     ssl: boolean;
 }
 
-const DB_CONFIG_KEY = 'maat_db_config';
 const DB_INITIALIZED_KEY = 'maat_db_initialized';
+const API_URL = 'http://localhost:3001/api';
 
 export const getDbConfig = (): DbConfig | null => {
-    const data = localStorage.getItem(DB_CONFIG_KEY);
+    const data = localStorage.getItem('maat_db_config'); // Recupera config salva para mostrar na UI
     return data ? JSON.parse(data) : null;
+};
+
+export const saveDbConfig = (config: DbConfig) => {
+    localStorage.setItem('maat_db_config', JSON.stringify(config));
 };
 
 export const isDbInitialized = (): boolean => {
     return localStorage.getItem(DB_INITIALIZED_KEY) === 'true';
 };
 
-export const saveDbConfig = (config: DbConfig) => {
-    localStorage.setItem(DB_CONFIG_KEY, JSON.stringify(config));
-};
-
 export const initializeDatabase = async (config: DbConfig): Promise<{success: boolean, message: string, logs: string[]}> => {
-    // This function simulates the Backend process of connecting to Postgres and running the Schema
-    const logs: string[] = [];
-    const log = (msg: string) => logs.push(`[${new Date().toLocaleTimeString()}] ${msg}`);
+    // ESTA VERSÃO NÃO USA MOCK. ELA CHAMA O BACKEND REAL.
+    try {
+        const response = await fetch(`${API_URL}/setup-db`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(config)
+        });
 
-    return new Promise((resolve) => {
-        log(`Tentando conexão com postgres://${config.user}:***@${config.host}:${config.port}/${config.dbName}...`);
+        const data = await response.json();
         
-        setTimeout(() => {
-            if (!config.host || !config.user) {
-                log('ERRO: Credenciais inválidas.');
-                resolve({ success: false, message: 'Dados incompletos', logs });
-                return;
-            }
-
-            log('Conexão TCP estabelecida.');
-            log('Autenticando usuário...');
-            
-            setTimeout(() => {
-                log('Autenticação OK.');
-                log('Verificando existência do Database...');
-                log(`Database '${config.dbName}' não encontrado. Criando...`);
-                log(`Database '${config.dbName}' criado com sucesso.`);
-                
-                log('Iniciando criação de Schema (Tabelas)...');
-                
-                // Simulate running the SQL commands
-                const commands = [
-                    'CREATE TABLE companies...',
-                    'CREATE TABLE users...',
-                    'CREATE TABLE service_requests...',
-                    'CREATE TABLE documents...',
-                    'INSERT INTO users (admin default)...'
-                ];
-
-                let delay = 0;
-                commands.forEach((cmd, idx) => {
-                    setTimeout(() => {
-                        log(`Executando: ${cmd}`);
-                        if (idx === commands.length - 1) {
-                            log('Migração concluída com sucesso.');
-                            log('Usuário Admin Padrão Criado: admin@maat.com / admin');
-                            
-                            localStorage.setItem(DB_INITIALIZED_KEY, 'true');
-                            resolve({ success: true, message: 'Banco de Dados Configurado!', logs });
-                        }
-                    }, delay);
-                    delay += 400;
-                });
-
-            }, 1000);
-        }, 1000);
-    });
+        if (data.success) {
+            localStorage.setItem(DB_INITIALIZED_KEY, 'true');
+            return { 
+                success: true, 
+                message: 'Banco de dados configurado com sucesso!', 
+                logs: data.logs || ['Sucesso ao configurar banco via Backend.'] 
+            };
+        } else {
+            return { 
+                success: false, 
+                message: data.message || 'Erro desconhecido no backend.', 
+                logs: data.logs || [data.message] 
+            };
+        }
+    } catch (error: any) {
+        return { 
+            success: false, 
+            message: 'ERRO CRÍTICO: Não foi possível conectar ao servidor Backend (Porta 3001).', 
+            logs: [
+                'Falha ao tentar: POST http://localhost:3001/api/setup-db',
+                `Erro técnico: ${error.message}`,
+                'Certifique-se de que o terminal do backend (maatcontabil_webhook) está rodando e sem erros.'
+            ] 
+        };
+    }
 };
 
 export const resetSystem = () => {
-    localStorage.removeItem(DB_CONFIG_KEY);
     localStorage.removeItem(DB_INITIALIZED_KEY);
+    localStorage.removeItem('maat_db_config');
     window.location.reload();
 };
