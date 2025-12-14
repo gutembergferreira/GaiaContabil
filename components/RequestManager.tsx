@@ -35,6 +35,7 @@ const RequestManager: React.FC<RequestManagerProps> = ({ role, currentUser, curr
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [pixStep, setPixStep] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [loadingMessage, setLoadingMessage] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
   const [copied, setCopied] = useState(false);
   
   // Dev Mode in Modal
@@ -166,6 +167,7 @@ const RequestManager: React.FC<RequestManagerProps> = ({ role, currentUser, curr
       setPixStep('loading');
       setIsPaymentModalOpen(true);
       setCopied(false);
+      setErrorMessage('');
 
       // Check if we already have a valid pix, skip simulation if so
       const isReuse = selectedReq.pixCopiaECola && selectedReq.pixExpiration && new Date(selectedReq.pixExpiration) > new Date();
@@ -175,21 +177,12 @@ const RequestManager: React.FC<RequestManagerProps> = ({ role, currentUser, curr
            return;
       }
       
-      setLoadingMessage('Conectando com instituição financeira...');
+      setLoadingMessage('Conectando com Banco Inter...');
       
       try {
-          // Simulation Step 1: Connecting
-          await new Promise(resolve => setTimeout(resolve, 1500));
-          
-          setLoadingMessage('Coletando dados para o PIX...');
-          // Simulation Step 2: Collecting Data
-          await new Promise(resolve => setTimeout(resolve, 1500));
-
-          setLoadingMessage('Gerando QR Code...');
-          // Simulation Step 3: Generating (Call Service)
+          // Real Call via Proxy
           const { txid, pixCopiaECola } = await generatePixCharge(selectedReq.id, selectedReq.price);
           
-          // Local update to show immediately
           const updatedReq = { 
               ...selectedReq, 
               txid, 
@@ -199,12 +192,12 @@ const RequestManager: React.FC<RequestManagerProps> = ({ role, currentUser, curr
           updateServiceRequest(updatedReq);
           setSelectedReq(updatedReq);
 
-          // Done
           setPixStep('success');
 
-      } catch (error) {
-          console.error(error);
+      } catch (error: any) {
+          console.error("Erro no Frontend:", error);
           setPixStep('error');
+          setErrorMessage(error.message || "Erro desconhecido ao comunicar com a API.");
       }
   };
 
@@ -217,9 +210,6 @@ const RequestManager: React.FC<RequestManagerProps> = ({ role, currentUser, curr
   };
 
   const checkPaymentStatus = () => {
-      // In a real app, this would poll the backend API
-      // For this integrated demo, we'll assume the user paid and we want to reflect that manually
-      // if the webhook hasn't arrived yet.
       if (selectedReq?.txid) {
           const success = simulateWebhookPayment(selectedReq.txid);
           if (success) {
@@ -500,12 +490,12 @@ const RequestManager: React.FC<RequestManagerProps> = ({ role, currentUser, curr
                    {/* ERROR STATE */}
                    {pixStep === 'error' && (
                        <div className="py-8">
-                           <div className="bg-red-50 text-red-600 p-4 rounded-lg mb-4 flex flex-col items-center">
+                           <div className="bg-red-50 text-red-600 p-4 rounded-lg mb-4 flex flex-col items-center border border-red-100">
                                <AlertTriangle size={32} className="mb-2"/>
-                               <p className="font-bold">Falha na comunicação</p>
-                               <p className="text-xs">Não foi possível conectar com a instituição financeira.</p>
+                               <p className="font-bold">Falha na API</p>
+                               <p className="text-xs text-center mt-2 break-words max-w-xs">{errorMessage}</p>
                            </div>
-                           <button onClick={() => { setIsPaymentModalOpen(false); setPixStep('idle'); }} className="text-sm text-slate-500 underline">Fechar e tentar depois</button>
+                           <button onClick={() => { setIsPaymentModalOpen(false); setPixStep('idle'); }} className="text-sm text-slate-500 underline">Fechar</button>
                        </div>
                    )}
 

@@ -1,11 +1,8 @@
 import { Routine, Document, Company, User, Notification, ChatMessage, AuditLog, ServiceRequest, RequestTypeConfig, PaymentConfig, RequestAttachment } from '../types';
 
 // ==========================================
-// API SERVICE (ANTIGO MOCK DATA)
-// Agora faz chamadas reais ao backend
+// API SERVICE (MOCK DATA + REAL API CALLS)
 // ==========================================
-
-const API_URL = 'http://localhost:3001/api';
 
 // --- LOCAL STORAGE CACHE (Para UI rápida) ---
 let USERS: User[] = [
@@ -37,7 +34,6 @@ let NOTIFICATIONS: Notification[] = [
     { id: 'n1', userId: 'u2', title: 'Imposto a vencer', message: 'O DAS vence amanhã. Favor verificar a guia na aba de impostos.', read: false, timestamp: new Date().toISOString() }
 ];
 
-// Carrega config de pagamento
 const loadPaymentConfig = (): PaymentConfig => {
     const saved = localStorage.getItem('maat_payment_config');
     if (saved) return JSON.parse(saved);
@@ -49,6 +45,7 @@ const loadPaymentConfig = (): PaymentConfig => {
     };
 };
 let PAYMENT_CONFIG: PaymentConfig = loadPaymentConfig();
+const API_URL = 'http://localhost:3001/api';
 
 // --- FUNÇÕES DE API REAIS ---
 
@@ -60,7 +57,6 @@ export const loginUser = async (email: string, pass: string): Promise<User | nul
             body: JSON.stringify({ email, password: pass })
         });
         
-        // Se falhar o fetch (catch) ou status != 200, cai no fallback
         if (!res.ok) throw new Error('Falha HTTP');
 
         const data = await res.json();
@@ -70,7 +66,6 @@ export const loginUser = async (email: string, pass: string): Promise<User | nul
         throw new Error(data.message);
     } catch (e) {
         console.warn("Backend offline ou login falhou. Usando Mock Local.", e);
-        // Fallback Mock Login
         const mockUser = USERS.find(u => u.email === email && u.password === pass);
         return mockUser || null;
     }
@@ -94,12 +89,9 @@ export const testPixConnection = async (): Promise<{success: boolean, message: s
 };
 
 // --- DATA ACCESSORS ---
-
 export const getUsers = () => USERS; 
 export const setUsersCache = (users: User[]) => { USERS = users; };
-
 export const getCompanies = () => COMPANIES;
-
 let CATEGORIES = ['Boletos', 'Impostos', 'Folha', 'Contratos', 'Documentos Solicitados', 'Outros'];
 export const getCategories = () => CATEGORIES;
 export const addCategory = (cat: string) => { if(!CATEGORIES.includes(cat)) CATEGORIES = [...CATEGORIES, cat]; };
@@ -123,9 +115,7 @@ export const updatePaymentConfig = (config: PaymentConfig) => {
 export const getDocuments = (companyId: string) => DOCUMENTS.filter(d => d.companyId === companyId);
 export const addDocument = (d: Document) => { DOCUMENTS = [d, ...DOCUMENTS]; };
 
-// LOGIC UPDATE: Notify Admin when Client marks as Paid
 export const updateDocument = (d: Document) => {
-    // Check if payment status changed to Paid
     const oldDoc = DOCUMENTS.find(doc => doc.id === d.id);
     if (oldDoc && oldDoc.paymentStatus !== 'Pago' && d.paymentStatus === 'Pago') {
          const admins = USERS.filter(u => u.role === 'admin');
@@ -168,7 +158,6 @@ export const getServiceRequests = (companyId?: string, includeDeleted = false) =
 
 export const addServiceRequest = (req: ServiceRequest) => { 
     REQUESTS = [req, ...REQUESTS]; 
-    // Notify Admins
     const admins = USERS.filter(u => u.role === 'admin');
     const creator = USERS.find(u => u.id === req.clientId);
     admins.forEach(admin => {
@@ -222,7 +211,7 @@ export const addNotification = (n: Notification) => { NOTIFICATIONS = [n, ...NOT
 export const updateNotification = (n: Notification) => { NOTIFICATIONS = NOTIFICATIONS.map(x => x.id === n.id ? n : x); };
 export const deleteNotification = (id: string) => { NOTIFICATIONS = NOTIFICATIONS.filter(n => n.id !== id); };
 
-// Mock placeholders para UI (Dashboard)
+// Mock placeholders
 export const MOCK_ROUTINES: Routine[] = [
   { id: '1', title: 'Fechamento Folha', clientName: 'Empresa Demo LTDA', department: 'Pessoal', deadline: '2024-06-05', status: 'Pendente', competence: '05/2024' },
   { id: '2', title: 'Apuração ICMS', clientName: 'Comércio Varejo SA', department: 'Fiscal', deadline: '2024-06-10', status: 'Em Análise', competence: '05/2024' },
@@ -239,21 +228,42 @@ export const CURRENT_CLIENT = {
     financials: { revenueMonth: 28500.00, revenueYear: 342000.00, receivables: 5200.00, payables: 3100.00, nextTaxDeadline: '20/06' } 
 };
 
+// --- CRITICAL CHANGE: NO MOCKS FOR PRODUCTION ---
 export const generatePixCharge = async (reqId: string, amount: number) => { 
-    // Se o backend estiver offline, gera mock
+    // Validação inicial básica
+    if (!PAYMENT_CONFIG.inter.clientId) {
+        throw new Error('CONFIG_ERROR: Client ID do Banco Inter não configurado nas Configurações.');
+    }
+
     try {
-        if (!PAYMENT_CONFIG.inter.clientId) throw new Error('Sem config');
         const res = await fetch(`${API_URL}/pix`, { 
             method: 'POST', 
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ amount, protocol: 'MOCK', pixKey: 'KEY', clientId: 'ID', clientSecret: 'SEC', requestData: {} })
+            body: JSON.stringify({ 
+                amount, 
+                protocol: 'REQ_REAL_' + reqId, // Envia ID real
+                pixKey: PAYMENT_CONFIG.inter.pixKey, 
+                clientId: PAYMENT_CONFIG.inter.clientId, 
+                clientSecret: PAYMENT_CONFIG.inter.clientSecret, 
+                requestData: { nome: 'Cliente Maat', cpf: '00000000000' } // Em produção, pegaria do cadastro do usuário
+            })
         });
-        if(!res.ok) throw new Error('Offline');
-        return await res.json();
-    } catch {
-        return { txid: 'mock_txid_123', pixCopiaECola: '00020126580014br.gov.bcb.pix0136123e4567-e89b-12d3-a456-426614174000520400005303986540510.005802BR5913Maat Contabil6008Sao Paulo62070503***6304E2CA' };
+
+        const data = await res.json();
+
+        if(!res.ok) {
+            // Repassa o erro detalhado do backend para o frontend tratar
+            const errorMsg = data.details?.error_description || data.error || data.message || 'Erro desconhecido ao gerar PIX';
+            throw new Error(errorMsg);
+        }
+
+        return data; // { txid, pixCopiaECola } reais do Inter
+    } catch (error: any) {
+        console.error("Erro CRÍTICO na geração PIX:", error);
+        throw error; // Lança o erro para o componente UI exibir. NÃO RETORNA MOCK.
     }
 }
+
 export const simulateWebhookPayment = (txid: string) => true;
 
 // Helpers CRUD
