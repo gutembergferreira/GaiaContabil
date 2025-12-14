@@ -16,20 +16,22 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = 3001;
 
-// --- LOGGER MIDDLEWARE ---
-// Isso vai mostrar no terminal cada requisição recebida
+// 1. CONFIGURAÇÕES BÁSICAS (CORS e Body Parser devem vir PRIMEIRO)
+app.use(cors());
+app.use(bodyParser.json());
+
+// 2. LOGGER MIDDLEWARE (Agora seguro, pois req.body já existe)
 app.use((req, res, next) => {
     const timestamp = new Date().toLocaleTimeString();
     console.log(`[${timestamp}] ${req.method} ${req.url}`);
-    if (Object.keys(req.body).length > 0) {
-       // Opcional: Mostra corpo da requisição (cuidado com senhas em produção)
-       // console.log('Body:', JSON.stringify(req.body).substring(0, 200) + '...'); 
+    
+    // Verificação de segurança: checa se req.body existe antes de ler as chaves
+    if (req.body && Object.keys(req.body).length > 0) {
+       // Opcional: Mostra corpo da requisição (útil para debug, mas cuidado com senhas)
+       // console.log('Payload:', JSON.stringify(req.body).substring(0, 500)); 
     }
     next();
 });
-
-app.use(cors());
-app.use(bodyParser.json());
 
 const upload = multer({ dest: 'certs/' });
 
