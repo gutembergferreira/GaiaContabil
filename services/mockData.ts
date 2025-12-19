@@ -37,7 +37,7 @@ export const fetchInitialData = async () => {
 
         REQUESTS = data.requests.map((r: any) => ({
             ...r,
-            attachments: data.attachments.filter((a: any) => a.entityId === r.id && a.entityType === 'request'),
+            attachments: data.attachments.filter((a: any) => a.entityId === r.id && (a.entityType === 'request' || !a.entityType)),
             chat: data.chat.filter((c: any) => c.entityId === r.id),
             auditLog: []
         }));
@@ -46,7 +46,7 @@ export const fetchInitialData = async () => {
             ...d,
             chat: data.chat.filter((c: any) => c.entityId === d.id),
             auditLog: [],
-            attachments: []
+            attachments: data.attachments.filter((a: any) => a.entityId === d.id && a.entityType === 'document')
         }));
 
         console.log("Dados sincronizados com o banco de dados.");
@@ -179,7 +179,6 @@ export const generatePixCharge = async (reqId: string, amount: number) => {
     } catch (error: any) { throw error; }
 };
 
-// HELPERS / PERSISTENCE (Existing placeholders)
 export const MOCK_ROUTINES: Routine[] = [];
 export const MOCK_EMPLOYEES = [];
 export const CURRENT_CLIENT = { id: 'c1', name: 'Empresa Demo', financials: { revenueMonth: 0, revenueYear: 0, receivables: 0, payables: 0, nextTaxDeadline: '' } };

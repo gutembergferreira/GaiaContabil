@@ -79,7 +79,6 @@ export interface HRAdmission {
     clientId: string;
     createdAt: string;
     updatedAt: string;
-    feedback?: HRFieldFeedback[];
 }
 
 export interface HRRequest {
@@ -92,7 +91,6 @@ export interface HRRequest {
     clientId: string;
     createdAt: string;
     updatedAt: string;
-    feedback?: HRFieldFeedback[];
 }
 
 // --- REST OF TYPES ---
@@ -153,6 +151,8 @@ export interface RequestAttachment {
   url: string;
   uploadedBy: string;
   createdAt: string;
+  entityType?: 'request' | 'admission' | 'hr_request';
+  entityId?: string;
 }
 
 export interface Document {

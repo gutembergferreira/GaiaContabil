@@ -249,7 +249,6 @@ app.post('/api/setup-db', async (req, res) => {
 
 app.get('/api/status', (req, res) => res.json({ configured: !!dbPool }));
 
-// FUNÇÃO AUXILIAR PARA QUERY SEGURA (Não quebra o sync se a tabela não existir)
 async function safeQuery(query, params = []) {
     if (!dbPool) return { rows: [] };
     try {

@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { 
     getEmployees, getHRAdmissions, getHRRequests, getWorkSites, getFieldFeedback,
@@ -7,7 +8,7 @@ import {
 import { 
     UserPlus, FolderOpen, AlertTriangle, UploadCloud, FileText, User, 
     ArrowLeft, Users, Calendar, Briefcase, Paperclip, ChevronRight, CheckCircle, 
-    XCircle, Clock, Search, MapPin, DollarSign, Info, Trash2
+    XCircle, Clock, Search, MapPin, DollarSign, Info, Trash2, FileCheck, UserMinus, Plus, Eye
 } from 'lucide-react';
 import { 
     Role, Employee, HRAdmission, HRRequest, WorkSite, HRAdmissionStatus, 
@@ -22,8 +23,8 @@ const HRManagement: React.FC<HRManagementProps> = ({ role }) => {
   const [activeTab, setActiveTab] = useState<'employees' | 'admissions' | 'requests' | 'sites'>('employees');
   const [view, setView] = useState<'list' | 'admission_form' | 'employee_details' | 'request_form'>('list');
   
-  // Data State
-  const companyId = 'c1'; // Mock current company
+  // Data State (Mocking current company)
+  const companyId = 'c1'; 
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [admissions, setAdmissions] = useState<HRAdmission[]>([]);
   const [hrRequests, setHrRequests] = useState<HRRequest[]>([]);
@@ -37,11 +38,14 @@ const HRManagement: React.FC<HRManagementProps> = ({ role }) => {
   const [feedbackField, setFeedbackField] = useState('');
   const [feedbackMsg, setFeedbackMsg] = useState('');
 
+  // Form State for Admission
+  const [formAdmission, setFormAdmission] = useState<Partial<HRAdmission>>({});
+
   useEffect(() => {
     refreshData();
   }, [companyId]);
 
-  const refreshData = () => {
+  const refreshData = async () => {
     setEmployees(getEmployees(companyId));
     setAdmissions(getHRAdmissions(companyId));
     setHrRequests(getHRRequests(companyId));
@@ -56,6 +60,58 @@ const HRManagement: React.FC<HRManagementProps> = ({ role }) => {
         case 'Validando': case 'Em Analise': return 'bg-amber-100 text-amber-700';
         default: return 'bg-slate-100 text-slate-600';
     }
+  };
+
+  // --- ACTIONS ---
+
+  const handleCreateAdmission = async () => {
+      const payload: HRAdmission = {
+          ...formAdmission,
+          id: Date.now().toString(),
+          companyId,
+          clientId: 'u2', // Demo
+          status: 'Novo',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+      } as HRAdmission;
+
+      await addHRAdmission(payload);
+      alert('Solicitação de admissão enviada com sucesso!');
+      setView('list');
+      setActiveTab('admissions');
+      refreshData();
+  };
+
+  const handleUpdateAdmission = async (updated: HRAdmission) => {
+      await updateHRAdmission(updated);
+      refreshData();
+  };
+
+  const handleFinalizeAdmission = async (adm: HRAdmission) => {
+      // 1. Create Employee
+      const newEmp: Employee = {
+          id: Date.now().toString(),
+          companyId: adm.companyId,
+          workSiteId: adm.workSiteId,
+          name: adm.fullName,
+          role: adm.role,
+          admissionDate: adm.expectedStartDate,
+          status: 'Ativo',
+          salary: adm.salary,
+          cpf: adm.cpf,
+          rg: adm.rg,
+          pis: adm.pis,
+          phone: '',
+          email: '',
+          vacationDue: new Date(new Date(adm.expectedStartDate).setFullYear(new Date(adm.expectedStartDate).getFullYear() + 1)).toISOString()
+      };
+      await addEmployee(newEmp);
+      // 2. Finish Admission
+      await updateHRAdmission({...adm, status: 'Finalizado'});
+      alert('Funcionário registrado com sucesso!');
+      setView('list');
+      setActiveTab('employees');
+      refreshData();
   };
 
   // --- RENDERS ---
@@ -114,7 +170,11 @@ const HRManagement: React.FC<HRManagementProps> = ({ role }) => {
                         {hrRequests.filter(r => r.employeeId === emp.id).map(r => (
                             <div key={r.id} className="flex items-center justify-between p-3 border border-slate-100 rounded hover:bg-slate-50">
                                 <div className="flex items-center gap-3">
-                                    <div className="p-2 bg-slate-100 rounded text-slate-600"><FileText size={16}/></div>
+                                    <div className="p-2 bg-slate-100 rounded text-slate-600">
+                                        {r.type === 'Férias' && <Calendar size={16}/>}
+                                        {r.type === 'Atestado' && <Paperclip size={16}/>}
+                                        {r.type === 'Demissão' && <UserMinus size={16}/>}
+                                    </div>
                                     <div>
                                         <p className="text-sm font-bold text-slate-800">{r.type}</p>
                                         <p className="text-xs text-slate-400">{new Date(r.createdAt).toLocaleDateString()}</p>
@@ -150,7 +210,7 @@ const HRManagement: React.FC<HRManagementProps> = ({ role }) => {
                              onClick={() => { setSelectedItem(emp); setSelectedType('Demissão'); setView('request_form'); }}
                              className="w-full flex items-center gap-3 px-4 py-3 bg-red-50 hover:bg-red-100 rounded-lg text-sm font-bold text-red-600"
                         >
-                            <User size={18}/> Solicitar Desligamento
+                            <UserMinus size={18}/> Solicitar Desligamento
                         </button>
                     </div>
                 </div>
@@ -163,12 +223,12 @@ const HRManagement: React.FC<HRManagementProps> = ({ role }) => {
     const isEditing = !!adm;
     const feedbacks = adm ? getFieldFeedback(adm.id) : [];
 
-    const InputField = ({ label, name, type = "text", placeholder = "" }) => {
+    const InputField = ({ label, name, type = "text", placeholder = "", required = true }) => {
         const hasError = feedbacks.find(f => f.fieldName === name && !f.resolved);
         return (
             <div className="relative">
                 <label className={`block text-xs font-bold uppercase mb-1 ${hasError ? 'text-red-600' : 'text-slate-500'}`}>
-                    {label} {hasError && <AlertTriangle size={12} className="inline ml-1"/>}
+                    {label} {required && <span className="text-red-500">*</span>} {hasError && <AlertTriangle size={12} className="inline ml-1"/>}
                 </label>
                 <input 
                     type={type} 
@@ -176,7 +236,8 @@ const HRManagement: React.FC<HRManagementProps> = ({ role }) => {
                         ${hasError ? 'border-red-300 bg-red-50 focus:ring-red-500' : 'border-slate-300 focus:ring-blue-500 focus:border-blue-500'}
                     `}
                     placeholder={placeholder}
-                    defaultValue={adm ? adm[name] : ''}
+                    defaultValue={adm ? (adm as any)[name] : (formAdmission as any)[name]}
+                    onChange={e => setFormAdmission({...formAdmission, [name]: e.target.value})}
                     disabled={role === 'admin' && adm?.status !== 'Validando'}
                 />
                 {hasError && (
@@ -185,10 +246,10 @@ const HRManagement: React.FC<HRManagementProps> = ({ role }) => {
                 {role === 'admin' && adm?.status === 'Validando' && (
                     <button 
                         onClick={() => setFeedbackField(name)}
-                        className="absolute right-2 top-7 text-red-400 hover:text-red-600"
+                        className="absolute right-2 top-8 text-red-400 hover:text-red-600"
                         title="Apontar Erro"
                     >
-                        <AlertTriangle size={16}/>
+                        <AlertTriangle size={14}/>
                     </button>
                 )}
             </div>
@@ -229,6 +290,7 @@ const HRManagement: React.FC<HRManagementProps> = ({ role }) => {
                             <InputField label="RG" name="rg" />
                             <InputField label="Data Nascimento" name="birthDate" type="date" />
                             <InputField label="Gênero" name="gender" />
+                            <InputField label="Estado Civil" name="maritalStatus" />
                         </div>
                     </section>
 
@@ -239,9 +301,9 @@ const HRManagement: React.FC<HRManagementProps> = ({ role }) => {
                             DOCUMENTAÇÃO E ENDEREÇO
                         </h3>
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            <InputField label="PIS" name="pis" />
-                            <InputField label="Título Eleitor" name="tituloEleitor" />
-                            <InputField label="Carteira de Trabalho (CTPS)" name="ctps" />
+                            <InputField label="PIS" name="pis" required={false} />
+                            <InputField label="Título Eleitor" name="tituloEleitor" required={false} />
+                            <InputField label="Carteira de Trabalho (CTPS)" name="ctps" required={false} />
                             <div className="md:col-span-3">
                                 <InputField label="Endereço Completo" name="address" placeholder="Rua, Número, Bairro, Cidade, UF, CEP" />
                             </div>
@@ -257,12 +319,16 @@ const HRManagement: React.FC<HRManagementProps> = ({ role }) => {
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                             <InputField label="Cargo" name="role" />
                             <InputField label="Salário Base (R$)" name="salary" type="number" />
+                            <InputField label="Data Prevista de Início" name="expectedStartDate" type="date" />
                             <div>
-                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Posto de Trabalho</label>
+                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Posto de Trabalho / Setor</label>
                                 <select 
                                     className="w-full border border-slate-300 rounded-lg p-2.5 text-sm"
+                                    onChange={e => setFormAdmission({...formAdmission, workSiteId: e.target.value})}
+                                    defaultValue={adm?.workSiteId}
                                     disabled={role === 'admin' && adm?.status !== 'Validando'}
                                 >
+                                    <option value="">Selecione um posto...</option>
                                     {sites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                                 </select>
                             </div>
@@ -279,12 +345,12 @@ const HRManagement: React.FC<HRManagementProps> = ({ role }) => {
                             <div className="border-2 border-dashed border-slate-200 rounded-xl p-6 text-center hover:bg-slate-50 cursor-pointer transition-colors">
                                 <UploadCloud size={32} className="mx-auto text-blue-500 mb-2"/>
                                 <p className="text-xs font-bold text-slate-700">Digitalização de Documentos</p>
-                                <p className="text-[10px] text-slate-400">Arraste aqui ou clique para selecionar PDF/JPG</p>
+                                <p className="text-[10px] text-slate-400">RG, CPF, PIS, Título, Comprovante Residência</p>
                             </div>
                             <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 flex items-center gap-4">
                                 <div className="bg-blue-100 p-2 rounded text-blue-600"><FileText size={24}/></div>
                                 <div className="flex-1 min-w-0">
-                                    <p className="text-xs font-bold text-slate-800 truncate">documentos_admissao.pdf</p>
+                                    <p className="text-xs font-bold text-slate-800 truncate">documentos_colaborador.pdf</p>
                                     <p className="text-[10px] text-slate-400">2.4 MB • Enviado em 24/05</p>
                                 </div>
                                 <button className="text-slate-400 hover:text-slate-600"><Search size={16}/></button>
@@ -300,28 +366,34 @@ const HRManagement: React.FC<HRManagementProps> = ({ role }) => {
                         {role === 'admin' && adm?.status === 'Validando' && (
                             <>
                                 <button 
-                                    onClick={() => {
-                                        updateHRAdmission({...adm, status: 'Formulario com Erro'});
-                                        setView('list');
-                                    }}
+                                    onClick={() => handleUpdateAdmission({...adm, status: 'Formulario com Erro'})}
                                     className="px-6 py-2 bg-red-600 text-white rounded-lg font-bold hover:bg-red-700 flex items-center gap-2"
                                 >
-                                    <XCircle size={18}/> Reprovar (Apontar Erros)
+                                    <XCircle size={18}/> Apontar Erros
                                 </button>
                                 <button 
-                                    onClick={() => {
-                                        updateHRAdmission({...adm, status: 'Validado'});
-                                        setView('list');
-                                    }}
+                                    onClick={() => handleUpdateAdmission({...adm, status: 'Validado'})}
                                     className="px-6 py-2 bg-emerald-600 text-white rounded-lg font-bold hover:bg-emerald-700 flex items-center gap-2"
                                 >
-                                    <CheckCircle size={18}/> Validar Tudo
+                                    <CheckCircle size={18}/> Validar Dados
                                 </button>
                             </>
                         )}
 
+                        {role === 'admin' && adm?.status === 'Validado' && (
+                            <button 
+                                onClick={() => handleFinalizeAdmission(adm)}
+                                className="px-6 py-2 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 flex items-center gap-2"
+                            >
+                                <FileCheck size={18}/> Registrar e Finalizar
+                            </button>
+                        )}
+
                         {role === 'client' && (!adm || adm.status === 'Novo' || adm.status === 'Formulario com Erro') && (
-                            <button className="px-12 py-2 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 shadow-lg">
+                            <button 
+                                onClick={isEditing ? () => handleUpdateAdmission({...adm, status: 'Validando'}) : handleCreateAdmission}
+                                className="px-12 py-2 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 shadow-lg"
+                            >
                                 {adm?.status === 'Formulario com Erro' ? 'Re-enviar para Validação' : 'Enviar Solicitação'}
                             </button>
                         )}
@@ -334,7 +406,7 @@ const HRManagement: React.FC<HRManagementProps> = ({ role }) => {
                 <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[100] p-4">
                     <div className="bg-white rounded-xl p-6 w-full max-w-sm shadow-2xl animate-scaleIn">
                         <h4 className="font-bold text-red-600 mb-2 flex items-center gap-2">
-                            <AlertTriangle size={20}/> Apontar Erro: {feedbackField}
+                            <AlertTriangle size={20}/> Erro no campo: {feedbackField}
                         </h4>
                         <textarea 
                             className="w-full border rounded-lg p-2 text-sm h-24 mb-4" 
@@ -345,8 +417,8 @@ const HRManagement: React.FC<HRManagementProps> = ({ role }) => {
                         <div className="flex justify-end gap-2">
                             <button onClick={() => setFeedbackField('')} className="px-4 py-2 text-slate-500">Cancelar</button>
                             <button 
-                                onClick={() => {
-                                    addFieldFeedback({
+                                onClick={async () => {
+                                    await addFieldFeedback({
                                         id: Date.now().toString(),
                                         targetId: adm!.id,
                                         fieldName: feedbackField,
@@ -355,10 +427,11 @@ const HRManagement: React.FC<HRManagementProps> = ({ role }) => {
                                     });
                                     setFeedbackField('');
                                     setFeedbackMsg('');
+                                    refreshData();
                                 }}
                                 className="px-4 py-2 bg-red-600 text-white rounded-lg font-bold"
                             >
-                                Salvar Erro
+                                Salvar Feedback
                             </button>
                         </div>
                     </div>
@@ -374,16 +447,16 @@ const HRManagement: React.FC<HRManagementProps> = ({ role }) => {
               <h2 className="text-xl font-bold text-slate-800">Postos de Trabalho / Setores</h2>
               {role === 'admin' && (
                   <button 
-                    onClick={() => {
+                    onClick={async () => {
                         const name = prompt('Nome do Posto/Setor:');
                         if(name) {
-                            addWorkSite({ id: Date.now().toString(), companyId, name });
+                            await addWorkSite({ id: Date.now().toString(), companyId, name });
                             refreshData();
                         }
                     }}
                     className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-blue-700"
                   >
-                      <UserPlus size={18}/> Novo Posto
+                      <Plus size={18}/> Novo Posto
                   </button>
               )}
           </div>
@@ -418,6 +491,8 @@ const HRManagement: React.FC<HRManagementProps> = ({ role }) => {
 
   const renderRequestForm = () => {
       const emp = selectedItem as Employee;
+      const [reqDetails, setReqDetails] = useState<any>({});
+      
       return (
           <div className="max-w-2xl mx-auto space-y-6 animate-fadeIn">
               <button onClick={() => setView('employee_details')} className="flex items-center gap-1 text-sm text-slate-500 hover:text-blue-600">
@@ -433,15 +508,15 @@ const HRManagement: React.FC<HRManagementProps> = ({ role }) => {
                           <div className="grid grid-cols-2 gap-4">
                               <div>
                                   <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Início</label>
-                                  <input type="date" className="w-full border rounded-lg p-2.5" />
+                                  <input type="date" className="w-full border rounded-lg p-2.5" onChange={e => setReqDetails({...reqDetails, start: e.target.value})} />
                               </div>
                               <div>
-                                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Retorno</label>
-                                  <input type="date" className="w-full border rounded-lg p-2.5" />
+                                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Dias</label>
+                                  <input type="number" className="w-full border rounded-lg p-2.5" defaultValue={30} onChange={e => setReqDetails({...reqDetails, days: e.target.value})} />
                               </div>
                               <div className="col-span-2 flex items-center gap-2">
-                                  <input type="checkbox" id="abono" className="w-4 h-4" />
-                                  <label htmlFor="abono" className="text-sm text-slate-700">Vender 10 dias de férias (Abono Pecuniário)?</label>
+                                  <input type="checkbox" id="abono" className="w-4 h-4" onChange={e => setReqDetails({...reqDetails, abono: e.target.checked})} />
+                                  <label htmlFor="abono" className="text-sm text-slate-700">Abono Pecuniário (venda de 10 dias)?</label>
                               </div>
                           </div>
                       )}
@@ -450,11 +525,11 @@ const HRManagement: React.FC<HRManagementProps> = ({ role }) => {
                           <div className="space-y-4">
                               <div>
                                   <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Data do Atestado</label>
-                                  <input type="date" className="w-full border rounded-lg p-2.5" />
+                                  <input type="date" className="w-full border rounded-lg p-2.5" onChange={e => setReqDetails({...reqDetails, date: e.target.value})} />
                               </div>
                               <div>
                                   <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Quantidade de Dias</label>
-                                  <input type="number" className="w-full border rounded-lg p-2.5" />
+                                  <input type="number" className="w-full border rounded-lg p-2.5" onChange={e => setReqDetails({...reqDetails, days: e.target.value})} />
                               </div>
                               <div className="border-2 border-dashed p-8 rounded-xl text-center">
                                   <UploadCloud className="mx-auto text-slate-400 mb-2" />
@@ -466,12 +541,13 @@ const HRManagement: React.FC<HRManagementProps> = ({ role }) => {
                       {selectedType === 'Demissão' && (
                           <div className="space-y-4">
                               <div>
-                                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Data do Último Dia</label>
-                                  <input type="date" className="w-full border rounded-lg p-2.5" />
+                                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Último Dia de Trabalho</label>
+                                  <input type="date" className="w-full border rounded-lg p-2.5" onChange={e => setReqDetails({...reqDetails, lastDay: e.target.value})} />
                               </div>
                               <div>
                                   <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Tipo de Desligamento</label>
-                                  <select className="w-full border rounded-lg p-2.5">
+                                  <select className="w-full border rounded-lg p-2.5" onChange={e => setReqDetails({...reqDetails, type: e.target.value})}>
+                                      <option value="">Selecione...</option>
                                       <option>Pedido de Demissão</option>
                                       <option>Dispensa sem Justa Causa</option>
                                       <option>Dispensa com Justa Causa</option>
@@ -480,7 +556,7 @@ const HRManagement: React.FC<HRManagementProps> = ({ role }) => {
                               </div>
                               <div>
                                   <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Aviso Prévio</label>
-                                  <select className="w-full border rounded-lg p-2.5">
+                                  <select className="w-full border rounded-lg p-2.5" onChange={e => setReqDetails({...reqDetails, aviso: e.target.value})}>
                                       <option>Trabalhado</option>
                                       <option>Indenizado</option>
                                   </select>
@@ -491,14 +567,14 @@ const HRManagement: React.FC<HRManagementProps> = ({ role }) => {
                       <div className="pt-6 flex justify-end gap-2">
                           <button onClick={() => setView('employee_details')} className="px-6 py-2 border rounded-lg font-bold">Cancelar</button>
                           <button 
-                            onClick={() => {
-                                addHRRequest({
+                            onClick={async () => {
+                                await addHRRequest({
                                     id: Date.now().toString(),
                                     employeeId: emp.id,
                                     companyId,
                                     type: selectedType,
                                     status: 'Solicitado',
-                                    details: {},
+                                    details: reqDetails,
                                     clientId: 'u2',
                                     createdAt: new Date().toISOString(),
                                     updatedAt: new Date().toISOString()
@@ -542,7 +618,7 @@ const HRManagement: React.FC<HRManagementProps> = ({ role }) => {
               </button>
               <button 
                 onClick={() => setActiveTab('sites')} 
-                className={`pb-3 px-4 text-sm font-bold border-b-2 flex items-center gap-2 whitespace-nowrap transition-all ${activeTab === 'sites' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
+                className={`pb-3 px-4 text-sm font-bold border-b-2 flex items-center gap-2 whitespace-nowrap transition-all ${activeTab === 'sites' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-400 hover:text-slate-700'}`}
               >
                   <MapPin size={18}/> Postos/Setores
               </button>
@@ -557,7 +633,7 @@ const HRManagement: React.FC<HRManagementProps> = ({ role }) => {
                           <input type="text" placeholder="Buscar funcionário..." className="w-full pl-10 pr-4 py-2 border rounded-lg text-sm" />
                       </div>
                       {role === 'client' && (
-                          <button onClick={() => { setView('admission_form'); setSelectedItem(null); }} className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-blue-700">
+                          <button onClick={() => { setView('admission_form'); setSelectedItem(null); setFormAdmission({}); }} className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-blue-700">
                               <UserPlus size={18}/> Nova Admissão
                           </button>
                       )}
@@ -638,9 +714,9 @@ const HRManagement: React.FC<HRManagementProps> = ({ role }) => {
                                   <td className="px-6 py-4 text-slate-500">{new Date(adm.expectedStartDate).toLocaleDateString()}</td>
                                   <td className="px-6 py-4 text-right">
                                       <button 
-                                        onClick={() => {
+                                        onClick={async () => {
                                             if (role === 'admin' && adm.status === 'Novo') {
-                                                updateHRAdmission({...adm, status: 'Validando'});
+                                                await handleUpdateAdmission({...adm, status: 'Validando'});
                                             }
                                             setSelectedItem(adm); 
                                             setView('admission_form');
@@ -685,19 +761,31 @@ const HRManagement: React.FC<HRManagementProps> = ({ role }) => {
                                       </td>
                                       <td className="px-6 py-4 text-slate-400">{new Date(r.createdAt).toLocaleDateString()}</td>
                                       <td className="px-6 py-4 text-right">
-                                          <button 
-                                            onClick={() => {
-                                                if(role === 'admin' && r.status === 'Solicitado') {
-                                                    updateHRRequest({...r, status: 'Em Analise'});
-                                                }
-                                                // Simplified detail view
-                                                alert(`Detalhes de ${r.type}: ${JSON.stringify(r.details)}`);
-                                                refreshData();
-                                            }}
-                                            className="text-blue-600 font-bold hover:underline"
-                                          >
-                                              Analisar
-                                          </button>
+                                          <div className="flex justify-end gap-2">
+                                              {role === 'admin' && r.status === 'Solicitado' && (
+                                                  <button 
+                                                    onClick={() => handleUpdateRequest({...r, status: 'Em Analise'})}
+                                                    className="bg-blue-600 text-white px-2 py-1 rounded text-[10px] font-bold"
+                                                  >
+                                                      Analisar
+                                                  </button>
+                                              )}
+                                              {role === 'admin' && r.status === 'Em Analise' && (
+                                                  <button 
+                                                    onClick={() => handleUpdateRequest({...r, status: 'Finalizado'})}
+                                                    className="bg-emerald-600 text-white px-2 py-1 rounded text-[10px] font-bold"
+                                                  >
+                                                      Finalizar
+                                                  </button>
+                                              )}
+                                              {/* Fix: Added Eye icon to lucide-react imports to resolve Cannot find name 'Eye' error */}
+                                              <button 
+                                                onClick={() => alert(`Dados: ${JSON.stringify(r.details)}`)}
+                                                className="text-slate-400 hover:text-blue-600"
+                                              >
+                                                  <Eye size={16}/>
+                                              </button>
+                                          </div>
                                       </td>
                                   </tr>
                               )
@@ -715,6 +803,11 @@ const HRManagement: React.FC<HRManagementProps> = ({ role }) => {
       </div>
   );
 
+  const handleUpdateRequest = async (req: HRRequest) => {
+      await updateHRRequest(req);
+      refreshData();
+  };
+
   const renderContent = () => {
     switch (view) {
         case 'employee_details': return renderEmployeeDetails(selectedItem);
@@ -728,7 +821,7 @@ const HRManagement: React.FC<HRManagementProps> = ({ role }) => {
     <div className="max-w-7xl mx-auto space-y-6">
         <div className="flex justify-between items-center mb-6">
             <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-3">
-                <Users className="text-blue-600" size={32}/> Departamento de Pessoal & RH
+                <Users className="text-blue-600" size={32}/> Gestão de RH & Capital Humano
             </h1>
         </div>
         {renderContent()}
